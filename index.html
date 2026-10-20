@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Control de Depósitos · Conteo de almacén</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Terminal de aduanas: barra de funciones arriba, paneles densos tipo libro registro, cifras en monoespaciada.
+   Dark-first (ámbar sobre negro cálido); tema claro equivalente en tinta sobre papel. */
+:root{
+  --bg:#0d0c0a; --panel:#15130f; --panel2:#1c1914; --line:#2c281f; --line2:#3a3428;
+  --fg:#ece6d8; --dim:#a39a86; --mute:#6f6758;
+  --amber:#ffb000; --amber-ink:#1a1200; --amber-soft:rgba(255,176,0,.12);
+  --dep:#58c48a; --dep-soft:rgba(88,196,138,.13);
+  --des:#ec6f53; --des-soft:rgba(236,111,83,.13);
+  --pue:#5bb2e0; --pue-soft:rgba(91,178,224,.13);
+  --sc:#c39bff; --sc-soft:rgba(195,155,255,.13);
+  --warn:#ffd25a;
+  --ui:"IBM Plex Sans Condensed","Arial Narrow","Roboto Condensed",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --r:3px;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){
+  --bg:#f6f5f1; --panel:#ffffff; --panel2:#efede6; --line:#dcd7ca; --line2:#c8c1b0;
+  --fg:#1b1913; --dim:#5d574a; --mute:#8b8474;
+  --amber:#a86a00; --amber-ink:#ffffff; --amber-soft:rgba(168,106,0,.10);
+  --dep:#1d7f4c; --dep-soft:rgba(29,127,76,.10);
+  --des:#b23a22; --des-soft:rgba(178,58,34,.09);
+  --pue:#1f6f9c; --pue-soft:rgba(31,111,156,.10);
+  --sc:#6d3fc4; --sc-soft:rgba(109,63,196,.09);
+  --warn:#8a6100; color-scheme:light;
+}}
+:root[data-theme="light"]{
+  --bg:#f6f5f1; --panel:#ffffff; --panel2:#efede6; --line:#dcd7ca; --line2:#c8c1b0;
+  --fg:#1b1913; --dim:#5d574a; --mute:#8b8474;
+  --amber:#a86a00; --amber-ink:#ffffff; --amber-soft:rgba(168,106,0,.10);
+  --dep:#1d7f4c; --dep-soft:rgba(29,127,76,.10);
+  --des:#b23a22; --des-soft:rgba(178,58,34,.09);
+  --pue:#1f6f9c; --pue-soft:rgba(31,111,156,.10);
+  --sc:#6d3fc4; --sc-soft:rgba(109,63,196,.09);
+  --warn:#8a6100; color-scheme:light;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--ui);margin:0}
+#app{padding-inline:16px;padding-block:0 48px;max-width:1480px;margin:0 auto}
+.mono,code,td.n,td.v,input.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+a{color:var(--amber)}
+
+/* ---------- barra superior ---------- */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);border-bottom:1px solid var(--line);margin-inline:-16px;padding-inline:16px}
+.top1{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-block:10px 6px}
+.brand{font-weight:700;letter-spacing:.14em;font-size:13px;text-transform:uppercase;display:flex;align-items:baseline;gap:8px}
+.brand b{color:var(--amber)}
+.brand span{color:var(--mute);font-weight:500;letter-spacing:.08em}
+.tick{font-family:var(--mono);font-size:12px;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap;flex:1;min-width:0}
+.tick i{font-style:normal;color:var(--fg)}
+.tick em{font-style:normal;color:var(--amber)}
+.tick span{white-space:nowrap}
+.save{font-family:var(--mono);font-size:11px;padding:3px 8px;border:1px solid var(--line2);border-radius:var(--r);color:var(--dim);white-space:nowrap}
+.save.ok{color:var(--dep);border-color:color-mix(in srgb,var(--dep) 45%,transparent)}
+.save.ro{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.fk{display:flex;gap:2px;overflow-x:auto;padding-bottom:0;scrollbar-width:none}
+.fk::-webkit-scrollbar{display:none}
+.fk button{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--dim);padding:7px 11px 8px;cursor:pointer;white-space:nowrap;font-size:13px;font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+.fk button kbd{font-family:var(--mono);font-size:10.5px;color:var(--amber-ink);background:var(--mute);padding:0 4px;border-radius:2px;margin-right:6px}
+.fk button:hover{color:var(--fg)}
+.fk button[aria-current="page"]{color:var(--amber);border-bottom-color:var(--amber)}
+.fk button[aria-current="page"] kbd{background:var(--amber)}
+
+/* ---------- estructura ---------- */
+.view{display:none;padding-top:18px}
+.view.on{display:block}
+.vh{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.vh h1{margin:0;font-size:20px;font-weight:600;letter-spacing:.02em;text-wrap:balance}
+.vh p{margin:3px 0 0;color:var(--dim);max-width:72ch;font-size:13.5px}
+.lab{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);font-weight:600}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.box>.bh{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid var(--line)}
+.box>.bh h2,.box>.bh h3{margin:0;font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+.box>.bb{padding:12px}
+.box>.bb.flush{padding:0}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.sp{flex:1}
+.muted{color:var(--dim)} .tiny{font-size:12px} .amber{color:var(--amber)}
+
+/* ---------- depósitos (panel) ---------- */
+.dep{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 18px;padding:14px 14px 10px}
+.dep .big{font-family:var(--mono);font-size:52px;line-height:.95;font-weight:700;color:var(--amber);grid-row:span 2}
+.dep .big small{display:block;font-size:11px;font-family:var(--ui);font-weight:600;letter-spacing:.14em;color:var(--mute);margin-top:6px;text-transform:uppercase}
+.dep h2{margin:0;font-size:16px;letter-spacing:.06em;font-weight:600}
+.dep .meta{font-family:var(--mono);font-size:11.5px;color:var(--dim);line-height:1.6}
+.nx{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.nx span{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);padding:2px 7px;border-radius:var(--r);color:var(--dim)}
+.nx span b{color:var(--fg);font-weight:500}
+
+/* barra de saldo */
+.lr{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(90px,1fr) 64px;gap:10px;align-items:center;padding:8px 14px;border-top:1px solid var(--line)}
+.lr .nm{min-width:0}
+.lr .nm b{font-weight:600}
+.lr .nm div{font-family:var(--mono);font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:8px;background:var(--panel2);border-radius:1px;position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--amber)}
+.bar.blk i{background:var(--warn);opacity:.7}
+.lr .q{font-family:var(--mono);text-align:right;font-size:15px;font-weight:700}
+.lr .q small{display:block;font-size:10.5px;color:var(--mute);font-weight:400}
+
+/* ---------- tablas ---------- */
+.tw{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--mute);font-weight:600;text-align:left;padding:7px 9px;border-bottom:1px solid var(--line2);white-space:nowrap;background:var(--panel);position:sticky;top:0}
+td{padding:5px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+th.n,td.n{text-align:right}
+td.n{white-space:nowrap}
+tbody tr:hover td{background:var(--panel2)}
+tr.sel td{background:var(--amber-soft)!important}
+tr.sub td{color:var(--dim);font-size:11.5px;border-bottom-style:dashed}
+tr.tot td{font-weight:700;border-top:1px solid var(--line2)}
+tr.ent td{background:color-mix(in srgb,var(--amber) 6%,transparent)}
+tr.fin td{background:var(--dep-soft);font-weight:700}
+td.vin{font-family:var(--mono);white-space:nowrap;letter-spacing:.02em}
+td.vin b{color:var(--amber);font-weight:700}
+.scroll{max-height:66vh;overflow:auto;border-top:1px solid var(--line)}
+
+/* ---------- estados ---------- */
+.st{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.05em;padding:1px 6px;border-radius:2px;white-space:nowrap}
+.st::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.st.DEP{color:var(--dep);background:var(--dep-soft)}
+.st.DES{color:var(--des);background:var(--des-soft)}
+.st.PUE{color:var(--pue);background:var(--pue-soft)}
+.st.SC{color:var(--sc);background:var(--sc-soft)}
+.st.BLK{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.flag{color:var(--warn);font-family:var(--mono);font-size:11px;cursor:help}
+.chip{display:inline-flex;gap:6px;align-items:center;font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);border-radius:var(--r);padding:2px 8px;background:var(--panel)}
+.chip b{font-weight:700}
+
+/* ---------- controles ---------- */
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:var(--r);padding:6px 12px;cursor:pointer;font-size:13px;font-weight:500;letter-spacing:.02em}
+.btn:hover{border-color:var(--amber);color:var(--amber)}
+.btn.pri{background:var(--amber);color:var(--amber-ink);border-color:var(--amber);font-weight:600}
+.btn.pri:hover{filter:brightness(1.08);color:var(--amber-ink)}
+.btn.sm{padding:3px 8px;font-size:12px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:var(--r);overflow:hidden}
+.seg button{background:transparent;border:0;padding:5px 10px;cursor:pointer;font-size:12.5px;color:var(--dim);border-right:1px solid var(--line2)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--amber-soft);color:var(--amber)}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:600;min-width:0}
+input[type=text],input[type=search],input[type=date],input[type=number],select,textarea{background:var(--bg);border:1px solid var(--line2);border-radius:var(--r);padding:6px 8px;min-width:0;width:100%;font-size:13px}
+textarea{font-family:var(--mono);font-size:12px;min-height:150px;resize:vertical;line-height:1.55}
+input.mono{letter-spacing:.02em}
+.fr{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:var(--r)}
+.qty button{background:transparent;border:0;width:26px;height:26px;cursor:pointer;color:var(--amber);font-family:var(--mono);font-size:15px}
+.qty span{font-family:var(--mono);min-width:26px;text-align:center;font-weight:700}
+
+/* ---------- salida / bloques ---------- */
+.out{background:var(--bg);border:1px solid var(--line2);border-radius:var(--r);padding:10px 12px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-word;max-height:420px;overflow:auto;margin:0}
+.note{border-left:3px solid var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);padding:8px 11px;font-size:13px;border-radius:0 var(--r) var(--r) 0}
+.note.bad{border-left-color:var(--des);background:var(--des-soft)}
+.note.ok{border-left-color:var(--dep);background:var(--dep-soft)}
+.note.info{border-left-color:var(--pue);background:var(--pue-soft)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tabs button{background:transparent;border:0;border-bottom:2px solid transparent;padding:7px 10px;cursor:pointer;color:var(--dim);font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:500}
+.tabs button[aria-selected="true"]{color:var(--amber);border-bottom-color:var(--amber)}
+.det{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 14px;font-size:13px}
+.det dt{color:var(--mute);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding-top:2px}
+.det dd{margin:0;font-family:var(--mono);font-size:12.5px;word-break:break-word}
+.empty{padding:22px;text-align:center;color:var(--dim)}
+.toast{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;flex-direction:column;gap:6px;max-width:min(420px,calc(100vw - 32px))}
+.toast div{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--amber);padding:9px 12px;border-radius:var(--r);font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.toast div.ok{border-left-color:var(--dep)} .toast div.bad{border-left-color:var(--des)}
+.modal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal .box{max-width:560px;width:100%;max-height:85vh;overflow:auto}
+.ro-banner{margin-top:12px}
+details.nt summary{cursor:pointer;color:var(--warn);font-size:12px;list-style:none}
+details.nt summary::-webkit-details-marker{display:none}
+details.nt p{margin:4px 0 0;font-size:12px;color:var(--dim);max-width:70ch}
+
+@media (max-width:900px){ .g2,.g3{grid-template-columns:minmax(0,1fr)} .dep .big{font-size:42px} .tick{flex-basis:100%;order:3} }
+@media (max-width:520px){ .lr{grid-template-columns:minmax(0,1fr) 56px} .lr .bar{grid-column:1/-1;order:3} .tick{font-size:11px;gap:10px} }
+@media (prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important} }
+</style>
+
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="top1">
+      <div class="brand"><b>CONTROL</b> DE DEPÓSITOS <span>ALMACÉN · DEPÓSITO ADUANERO</span></div>
+      <div class="tick" id="tick"><span>Cargando estado…</span></div>
+      <span class="save" id="saveState">—</span>
+    </div>
+    <nav class="fk" id="nav" aria-label="Secciones">
+      <button data-v="panel" aria-current="page"><kbd>1</kbd>Panel</button>
+      <button data-v="stock"><kbd>2</kbd>Stock</button>
+      <button data-v="cuadros"><kbd>3</kbd>Cuadros</button>
+      <button data-v="despacho"><kbd>4</kbd>Despacho</button>
+      <button data-v="llegada"><kbd>5</kbd>Llegada · puerto</button>
+      <button data-v="aeat"><kbd>6</kbd>Conciliación AEAT</button>
+      <button data-v="valores"><kbd>7</kbd>Valores</button>
+      <button data-v="fuentes"><kbd>8</kbd>Fuentes y datos</button>
+    </nav>
+  </header>
+  <div id="roBanner" class="ro-banner" hidden></div>
+  <section class="view on" id="v-panel"><div class="empty">Cargando el estado de los depósitos…</div></section>
+  <section class="view" id="v-stock"></section>
+  <section class="view" id="v-cuadros"></section>
+  <section class="view" id="v-despacho"></section>
+  <section class="view" id="v-llegada"></section>
+  <section class="view" id="v-aeat"></section>
+  <section class="view" id="v-valores"></section>
+  <section class="view" id="v-fuentes"></section>
+  <div class="toast" id="toast" aria-live="polite"></div>
+  <div id="modalHost"></div>
+</div>
+
+<script type="application/json" id="estado-embebido">{"esquema":1,"corte":"2026-10-09","generado":"2026-10-09T07:00:00+02:00","depositos":{"DEPA":{"nombre":"Depósito Demo A","id":"ESDEMOTU5ABYK8","lugar":"Ciudad A","titular":"Titular Demo A","ultSS":{"2026":47},"ultSE":{"2026":2},"contacto":"logistica@ejemplo.test"},"DEPB":{"nombre":"Depósito Demo B","id":"ESDEMO27L52RE0","lugar":"Ciudad B","titular":"Operador Logístico Demo S.L. · B00000000 · Aut. DEMO0000","ultSS":{"2026":70},"ultSE":{"2026":19},"contacto":"almacen@ejemplo.test · contacto@ejemplo.test"}},"dossiers":[{"id":"100011","deposito":"DEPA","depositante":"DEPOSITANTE DEMO 1","marca":"MARCAUNO","titulo":"MARCAUNO MOD-C híbrido · 79 llegados","sEntrada":"1/2026","dvd":"99DEMO0D9PCF43ESF4","llegada":"2025-12","divisa":"USD","archivo":"DEPOSITO/100011.xlsx","modelos":{"MOD-C":{"nombre":"MARCAUNO MOD-C híbrido","uds":54,"pb":1637,"pn":1637,"imp":19770.0,"tte":1631.69,"seg":23.05,"thc":92.29,"t3":16.01,"plast":0.16,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 60","version":"INTELLIGENT"}},"puerto":{"uds":{"MOD-C":25},"dossier":"","dua":"","nota":"Demo"},"salidas":[{"n":1,"ss":"04/2026","dossier":"100018","dua":"99DEMORCJV3KHWMGN0","fecha":null,"uds":{"MOD-C":3},"vins":["YPWJCPL00Y61ZXAY7","YRBS6CKK01UE9TZJC","GN4G0VSK0WY09SZ2Y"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":2,"ss":"8/2026","dossier":"100025","dua":"99DEMOX660WSMSFW8Y","fecha":null,"uds":{"MOD-C":1},"vins":["DYX790SS0KJPA6252"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":3,"ss":"11/2026","dossier":"100032","dua":"99DEMOLYK83CEXYZ86","fecha":null,"uds":{"MOD-C":1},"vins":["WLEKWWTY3NFMWZ6Z4"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":4,"ss":"14/2026","dossier":"100039","dua":"99DEMOW5V1ZB6ZLH8D","fecha":null,"uds":{"MOD-C":1},"vins":["E8XMUTBL5SBPD25NV"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":5,"ss":"","dossier":"","dua":"99DEMO8FL52UJ4U3Z1","fecha":null,"uds":{"MOD-C":1},"vins":["9GNSDJDF7YJANUAXB"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":["Demo"]},{"n":6,"ss":"19/2026","dossier":"100046","dua":"99DEMORA8MTVAK30XJ","fecha":null,"uds":{"MOD-C":3},"vins":["PXXB82YMX3CFY82T6","ABXXD3YL9BKPKFZ04","ZKYRT7CW6U0UJTA7G"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":7,"ss":"20/2026","dossier":"100053","dua":"99DEMO2G72DNEP5LHY","fecha":null,"uds":{"MOD-C":1},"vins":["0KR2FBJH39PMT0KML"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":["Demo"]},{"n":8,"ss":"22/2026","dossier":"100060","dua":"99DEMOBEP1KTZ07HH8","fecha":null,"uds":{"MOD-C":2},"vins":["BZS58PZ13PXBGAE2Z","DR131RBT3T4SRZPX4"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":9,"ss":"23/2026","dossier":"100067","dua":"99DEMOGYT7LBP0KBWF","fecha":null,"uds":{"MOD-C":1},"vins":["UW8PL7UJ5VFYA8SLX"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":10,"ss":"25/2026","dossier":"100074","dua":"99DEMOYRNS2RN8ZBBU","fecha":null,"uds":{"MOD-C":1},"vins":["5PDP0C5M3JWBHKAJW"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":11,"ss":"28/2026","dossier":"100081","dua":"99DEMO0FRGR7NYP7A7","fecha":null,"uds":{"MOD-C":30},"vins":["K9ZGL62F1Y2YCSNAC","J9R4GBDX3HH8J4AMR","K9HZ8EZP8EUMATUEC","N9D30UAX86VY3U24X","31K113KA59T1SNHFC","D2X5X6A749Y1S1ZE2","UXERTT7Z2RKE0PL0S","MK6MCX108H3KT1G0Z","W5FU2V5H47MKAJ08S","0Y1TBNAT9MWUXTST5","F8FNJ4V09510CV34T","ZS1JN0EP7EF51238B","G66437ME828J9ARN2","CVY16HFR5AG8FP6DN","Y7D3J3DK4YNAMUTFX","1TW293DW2S14TWNJD","P068K0YNXDXAE3XCU","R5VNP6255PDM4HDJE","8MAL8RVP8KPG6GNFD","3RT54KDJ8L5VRXKWT","XPKR2CX1XVRFN6KM4","Y2HCZHPE38ZB8FN8U","WFNJ7URWXGAZNKWDM","YZ57SY0M6WE6GHL26","CCC9G3J30E0L0LFYA","7WKTGGSH78UHX6SLC","9T0NV2PJ29SGAGD8P","RFLKTB427VHFPRS9D","SEYGCPMW4F6MAX33C","FSK9LKZJ8NRYEA7C8"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":12,"ss":"40/2026","dossier":"100088","dua":"99DEMOM4YF262FLLJB","fecha":null,"uds":{"MOD-C":1},"vins":["YEEND03F1L88JTWD6"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":["Demo"]},{"n":13,"ss":"43/2026","dossier":"100095","dua":"99DEMOJBAGJ4NPBTPV","fecha":null,"uds":{"MOD-C":1},"vins":["L419WHET6SN6S8D22"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":14,"ss":"45/2026","dossier":"100109","dua":"99DEMODZ639JK9B5MA","fecha":"2026-09-30","uds":{"MOD-C":1},"vins":["Y12FRY4W5W8BH733W"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]}],"notas":[]},{"id":"100116","deposito":"DEPA","depositante":"DEPOSITANTE DEMO 1","marca":"MARCAUNO","titulo":"MARCAUNO MOD-C · 51 llegados","sEntrada":"2/2026","dvd":"99DEMOX7GDSNUCG95B","llegada":"2026-01","divisa":"CNY","archivo":"DEPOSITO/100116.xlsx","modelos":{"MOD-C":{"nombre":"MARCAUNO MOD-C","uds":50,"pb":1809,"pn":1809,"imp":116460.0,"tte":1580.26,"seg":12.04,"thc":98.32,"t3":17.06,"plast":0.15,"mon":{"imp":"CNY","tte":"USD","seg":"EUR"},"partida":"8703 60","version":"INTELLIGENT"}},"puerto":{"uds":{"MOD-C":1},"dossier":"100123","dua":"99DEMOU5979STN5J3H","nota":"Demo"},"salidas":[{"n":1,"ss":"6/2026","dossier":"100130","dua":"99DEMOEPWHK0KTJ6RG","fecha":null,"uds":{"MOD-C":3},"vins":["6KYPFZ264VYFUM53S","HPC1M1UY50LRZ2W8X","9NL2AAMGX6TZG91JT"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":2,"ss":"9/2026","dossier":"100137","dua":"99DEMO92Y3NZXF0BY6","fecha":null,"uds":{"MOD-C":2},"vins":["3E9Y5UV021D880BDH","15W9K6CX5JAUKN9C2"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":3,"ss":"13/2026","dossier":"100144","dua":"99DEMOEHRGFTUCMUJ4","fecha":null,"uds":{"MOD-C":1},"vins":["MUSVB33F380UXL8DZ"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":4,"ss":"15/2026","dossier":"100151","dua":"99DEMOFUDM4EUBFTFR","fecha":null,"uds":{"MOD-C":1},"vins":["JNDLWLWD710MUW7NX"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":["Demo"]},{"n":5,"ss":"18/2026","dossier":"100158","dua":"99DEMO3UJCSHLTDMNW","fecha":null,"uds":{"MOD-C":2},"vins":["52GT02X14UHP593LX","CKU73EU242VHT5ACW"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":6,"ss":"24/2026","dossier":"100165","dua":"99DEMOUZBTCAB9N97S","fecha":null,"uds":{"MOD-C":1},"vins":["Z0TSEG3HXLMH22Y22"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":7,"ss":"29/2026","dossier":"100172","dua":"99DEMOWPRYNJ2ZDJAE","fecha":null,"uds":{"MOD-C":2},"vins":["8YZMK3VJ6YE3E9AS4","2PUJKRS98VC1VJ1UE"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":8,"ss":"30/2026","dossier":"100179","dua":"99DEMO9VSVC6MLU5AT","fecha":null,"uds":{"MOD-C":2},"vins":["9UPRWG0F1BEHXPA6J","5U9D5CC657RVYYRPP"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":9,"ss":"31/2026","dossier":"100186","dua":"99DEMOPZMAY1F7U9NS","fecha":null,"uds":{"MOD-C":2},"vins":["VBRMB9U47EUFH2193","RD0YTE7J566NYNH2L"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":10,"ss":"31/2026","dossier":"100186","dua":"99DEMO2C2BWWRFK1X8","fecha":null,"uds":{"MOD-C":2},"vins":["VNEB5NNT5VBBEZP3A","TZLXZWGC1Z3B6GYGK"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":["Demo"]},{"n":11,"ss":"33/2026","dossier":"100193","dua":"99DEMO9J9BRFBCJ0G1","fecha":null,"uds":{"MOD-C":1},"vins":["078FYX7J7T91PZTBN"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":12,"ss":"34/2026","dossier":"100200","dua":"99DEMOA6E9FE7TETSP","fecha":null,"uds":{"MOD-C":1},"vins":["U41L4JJA5P1BAF6CP"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":13,"ss":"35/2026","dossier":"100207","dua":"99DEMOVCNEKYTWJA7D","fecha":null,"uds":{"MOD-C":1},"vins":["EXY68PAS1Z1GGJN56"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":["Demo"]},{"n":14,"ss":"36/2026","dossier":"100214","dua":"99DEMOV666HNWF7BV6","fecha":null,"uds":{"MOD-C":1},"vins":["5ED7L2S73KH81ESRA"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":15,"ss":"37/2026","dossier":"100221","dua":"99DEMOPEFKT0J9UH0R","fecha":null,"uds":{"MOD-C":2},"vins":["2RCSGNAC3D2SRC3TC","K6B7GGMKX9XG91AEB"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":16,"ss":"38/2026","dossier":"100228","dua":"99DEMO852WK3Z1XHYA","fecha":null,"uds":{"MOD-C":1},"vins":["F9EDV62A7BM96PHP4"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":17,"ss":"39/2026","dossier":"100235","dua":"99DEMOVT0E21E04UDU","fecha":null,"uds":{"MOD-C":1},"vins":["HFZGFSGF3UWWVK8YN"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":18,"ss":"41/2026","dossier":"","dua":"99DEMO49XN04B2PFD3","fecha":"2026-09-15","uds":{"MOD-C":2},"vins":["AFECHP168PFBDBJ4D","MV5TJTWZ8X1GL5L7X"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":["Sin dossier en el cuadro."]},{"n":19,"ss":"42/2026","dossier":"100116","dua":"99DEMOL73YVWTT2SW7","fecha":"2026-09-16","uds":{"MOD-C":2},"vins":["USA3BYRZ5ASYFLGCX","4Y0EH6LP0S3FPPVAT"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":["Demo"]},{"n":20,"ss":"44/2026","dossier":"100242","dua":"99DEMO98R5Y54JNSFM","fecha":"2026-09-30","uds":{"MOD-C":1},"vins":["4HM5LV2S0TBFPTKEE"],"fuente":"Cuadro Carpeta + export AEAT 30/09/26","notas":[]},{"n":21,"ss":"46/2026","dossier":"100249","dua":"","fecha":"2026-09-30","uds":{"MOD-C":2},"vins":["2WEEEAE08KH89U5MG","TW23M5G69XPB1RGPZ"],"fuente":"Cuadro Carpeta + solicitud CLIENTE 30/09/26 10:10","notas":["Posterior al export AEAT: DUA no visto."]},{"n":22,"ss":"47/2026","dossier":"100256","dua":"99DEMONB313P1UYD8U","fecha":"2026-10-07","uds":{"MOD-C":2},"vins":["YUANEFLW7MCK7GD1T","FRDEVAUJ80MJ0T00L"],"fuente":"Cuadro Carpeta + solicitud 07/10/26 + levante 07/10/26","notas":[]}],"notas":[]},{"id":"100263","deposito":"DEPB","depositante":"DEPOSITANTE DEMO 2 S.L.","marca":"MARCADOS","titulo":"MARCADOS MOD-A + MOD-B · 100 llegados","sEntrada":"15/2026","dvd":"99DEMOS1254WBJC478","llegada":"2026-03","divisa":"USD","archivo":"DEPOSITO/100263.xlsx","modelos":{"MOD-A":{"nombre":"MARCADOS MOD-A","uds":50,"pb":1693,"pn":1693,"imp":16490.0,"tte":1609.05,"seg":7.23,"thc":87.32,"t3":15.15,"plast":0.15,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 23","version":"PETROL"},"MOD-B":{"nombre":"MARCADOS MOD-B","uds":50,"pb":1496,"pn":1496,"imp":13620.0,"tte":1593.01,"seg":7.23,"thc":82.19,"t3":14.26,"plast":0.15,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 23","version":"PETROL","alias":["X75"]}},"puerto":null,"salidas":[{"n":1,"ss":"28/2026","dossier":"100270","dua":"","fecha":null,"uds":{"MOD-A":8,"MOD-B":22},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":2,"ss":"29/2026","dossier":"100277","dua":"","fecha":null,"uds":{"MOD-B":1},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":3,"ss":"31/2026","dossier":"100284","dua":"","fecha":null,"uds":{"MOD-B":3},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":4,"ss":"","dossier":"","dua":"","fecha":null,"uds":{"MOD-B":2},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":["Demo"]},{"n":5,"ss":"40/2026","dossier":"100291","dua":"","fecha":null,"uds":{"MOD-B":1},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":6,"ss":"42/2026","dossier":"100298","dua":"","fecha":null,"uds":{"MOD-B":1},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":["Demo"]},{"n":7,"ss":"44/2026","dossier":"100312","dua":"","fecha":null,"uds":{"MOD-A":2,"MOD-B":2},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":8,"ss":"52/2026","dossier":"100319","dua":"","fecha":null,"uds":{"MOD-A":1,"MOD-B":2},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":9,"ss":"53/2026","dossier":"100326","dua":"","fecha":null,"uds":{"MOD-A":5,"MOD-B":5},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":10,"ss":"55/2026","dossier":"100333","dua":"","fecha":null,"uds":{"MOD-A":3},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":11,"ss":"57/2026","dossier":"100340","dua":"","fecha":null,"uds":{"MOD-A":1},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":12,"ss":"58/2026","dossier":"100347","dua":"","fecha":null,"uds":{"MOD-A":1},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":13,"ss":"60/2026","dossier":"100354","dua":"","fecha":null,"uds":{"MOD-A":1},"vins":[],"fuente":"Cuadro Carpeta (bastidores no documentados)","notas":[]},{"n":14,"ss":"61/2026","dossier":"100361","dua":"99DEMOGRKKG6FCAJRC","fecha":"2026-06-25","uds":{"MOD-A":2},"vins":["MR45DHNE5057SYDE9","R7P1HD4D8L9XPGF7T"],"fuente":"Cuadro Carpeta + correo de levante/expedición","notas":[]},{"n":15,"ss":"62/2026","dossier":"100368","dua":"99DEMOEWN1TRAAW6UX","fecha":"2026-07-02","uds":{"MOD-A":1},"vins":["66JE5XGPX0EH77TM9"],"fuente":"Cuadro Carpeta + correo de levante/expedición","notas":[]},{"n":16,"ss":"63/2026","dossier":"100375","dua":"99DEMOWDBN83FTR40R","fecha":"2026-07-03","uds":{"MOD-A":1,"MOD-B":1},"vins":["A9B7CR8J4K1XC0MRB","6F5PCV5JXWXNE2BLA"],"fuente":"Cuadro Carpeta + correo de levante/expedición","notas":[]},{"n":17,"ss":"64/2026","dossier":"100382","dua":"","fecha":"2026-07-13","uds":{"MOD-B":1},"vins":["07RE70983PN7NW6UR"],"fuente":"Cuadro Carpeta + correo de levante/expedición","notas":[]},{"n":18,"ss":"65/2026","dossier":"100389","dua":"99DEMONAV9EP8NWNR6","fecha":"2026-07-23","uds":{"MOD-A":3,"MOD-B":2},"vins":["XC3MY3B06SAKT671J","TSHU3KJJ2DLR4LF53","TRKU3GD43BVEVMJ3E","1W9H5S8034ET1MTS3","0TED7PXA17YM6XR4F"],"fuente":"Cuadro Carpeta + correo de levante/expedición","notas":[]},{"n":19,"ss":"66/2026","dossier":"100396","dua":"99DEMOR83DK2DPBK3D","fecha":"2026-07-27","uds":{"MOD-A":1},"vins":["P32JR00120JRPUHC9"],"fuente":"Cuadro Carpeta + correo de levante/expedición","notas":[]},{"n":20,"ss":"67/2026","dossier":"100403","dua":"99DEMOFLYNM6CW10Y5","fecha":"2026-08-14","uds":{"MOD-B":1},"vins":["J23E76YZ04XM7BL20"],"fuente":"Cuadro Carpeta + correo de levante/expedición","notas":["Demo"]},{"n":21,"ss":"69/2026","dossier":"100410","dua":"","fecha":"2026-09-02","uds":{"MOD-B":2},"vins":["HVPSN0WT5E6CNA3UB","EAMFSAMRMTSBBHFFN"],"fuente":"Cuadro Carpeta + correo de levante/expedición","notas":["Demo"]},{"n":22,"ss":"70/2026","dossier":"100417","dua":"99DEMOZ3HP1ZW4FD7N","fecha":"2026-09-03","uds":{"MOD-A":1},"vins":["K7YEZXV39TYDFTLTF"],"fuente":"Cuadro Carpeta + correo de levante/expedición","notas":["Demo"]}],"notas":[]},{"id":"DOS-2024","deposito":"DEPB","depositante":"DEPOSITANTE DEMO 3 S.L.","marca":"MARCATRES","titulo":"MARCATRES 5 · saldo problemático","sEntrada":"","dvd":"99DEMOB3S2C1C6EDTN (4WD) · 99DEMOTXUWAEBRG761 (2WD)","llegada":"2024-01","divisa":"USD","archivo":"DEPOSITO/DOS-2024.xlsx","modelos":{"4WD":{"nombre":"MARCATRES 5 4WD","uds":25,"pb":2430,"pn":2427,"imp":33910.0,"tte":2566.57,"seg":40.64,"thc":214.08,"t3":0.0,"plast":0,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 80","version":"4WD (vehículo 40.365 USD + batería 435 USD)"},"2WD":{"nombre":"MARCATRES 5 2WD","uds":25,"pb":2050,"pn":2048,"imp":35280.0,"tte":1816.61,"seg":28.77,"thc":151.52,"t3":0.0,"plast":0,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 80","version":"2WD (vehículo 38.565 USD + batería 435 USD)"}},"puerto":null,"salidas":[{"n":1,"ss":"","dossier":"100424","dua":"99DEMOAWKSXX60F9N2","fecha":null,"uds":{"2WD":2},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":[]},{"n":2,"ss":"","dossier":"100431","dua":"99DEMOXL4GETFPG385","fecha":null,"uds":{"4WD":6,"2WD":2},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":[]},{"n":3,"ss":"","dossier":"100438","dua":"99DEMOHVVUU0TTN5SM","fecha":null,"uds":{"4WD":1},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":[]},{"n":4,"ss":"","dossier":"100445","dua":"99DEMOE2TS9RG6CGA7","fecha":null,"uds":{"4WD":3,"2WD":7},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":[]},{"n":5,"ss":"","dossier":"100452","dua":"99DEMOHDNNE09M5TAG","fecha":null,"uds":{"2WD":1},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":[]},{"n":6,"ss":"","dossier":"100459","dua":"99DEMOCPTCPAX30MWE","fecha":null,"uds":{"4WD":5,"2WD":5},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":[]},{"n":7,"ss":"","dossier":"100466","dua":"99DEMOG2KFL2U3VW3","fecha":null,"uds":{"2WD":1},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":["Demo"]},{"n":8,"ss":"","dossier":"100480","dua":"99DEMO0N22PA4L4HF2","fecha":null,"uds":{"2WD":1},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":["PB tecleado 2.203 kg en el cuadro."]},{"n":9,"ss":"","dossier":"100487","dua":"99DEMOK2F09LKZVLLE","fecha":null,"uds":{"4WD":1},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":[]},{"n":10,"ss":"","dossier":"100494","dua":"99DEMOC7XD1FLR2N7M","fecha":null,"uds":{"2WD":1},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":["Demo"]},{"n":11,"ss":"","dossier":"100501","dua":"99DEMOHKSNCCXH16W3W","fecha":null,"uds":{"2WD":1},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":["MRN con errata en el cuadro (\"000914\")."]},{"n":12,"ss":"","dossier":"100508","dua":"99DEMO5MBA86S56M72","fecha":null,"uds":{"4WD":5},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":["Demo"]},{"n":13,"ss":"","dossier":"100515","dua":"99DEMOF599CCJFX9FD","fecha":null,"uds":{"2WD":1},"vins":[],"fuente":"SALDOS PROBLEMATICO ENERO (Carpeta)","notas":[]}],"bloqueado":true,"notas":[]}],"vehiculos":[{"vin":"EDTJYY982NDK41VBR","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"WE7GEKN52RF74JANP","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"G6ST94YD7RBR9VP6N","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"MPWTJLDR3YW2XWDXF","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"VDX9SKMS1BNXH907W","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"EGE147ET6R5X7305X","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"DG6FUJCJ36CWEY4FK","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"2GDCVJGE8L3LSM14Y","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"0HS6HFT16RMV62NJN","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"8G9YSBT92KXXMYN3D","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"ARZATCCX6XU0W0Z21","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"VHRA3SDL6WT9X14WJ","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"SYDZMXJD4Y76PY0SE","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"GHXBBR0E88DN62W71","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"W7XZWZGE853ARPP00","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"HC64BJ4F2V9ZGRDR0","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"4L1E3NXW19M89AK1L","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"MBH0DDP949P96KPKK","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"5B4JTUR3296DFAYLS","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"TRMRMNH65U49D8A5F","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"E3KX6LPY9SNRL3Z4W","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"WLP5FKNX09VM37587","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"U7N79K9L1EZ1E2GZ4","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"YZ2K6AC79924WLAK0","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"2XRYL2MV2JBX758U0","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"BZX7HYT17B01E0AUY","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"V8L1BENP4JKWRRD4T","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"YPWJCPL00Y61ZXAY7","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":1,"conf":"Demo","nota":""},{"vin":"MK6MCX108H3KT1G0Z","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"W5FU2V5H47MKAJ08S","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"0Y1TBNAT9MWUXTST5","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"F8FNJ4V09510CV34T","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"HGKFK4NC914FMJWCF","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"G66437ME828J9ARN2","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"CVY16HFR5AG8FP6DN","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"Y7D3J3DK4YNAMUTFX","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"1TW293DW2S14TWNJD","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"P068K0YNXDXAE3XCU","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"R5VNP6255PDM4HDJE","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"8MAL8RVP8KPG6GNFD","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"3RT54KDJ8L5VRXKWT","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"XPKR2CX1XVRFN6KM4","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"YZ57SY0M6WE6GHL26","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"CCC9G3J30E0L0LFYA","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"9GNSDJDF7YJANUAXB","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":5,"conf":"Demo","nota":""},{"vin":"FSK9LKZJ8NRYEA7C8","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"K9ZGL62F1Y2YCSNAC","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"J9R4GBDX3HH8J4AMR","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"K9HZ8EZP8EUMATUEC","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"L419WHET6SN6S8D22","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":13,"conf":"Demo","nota":""},{"vin":"N9D30UAX86VY3U24X","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"DLHCBXLH2LGMNZN0H","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"DYX790SS0KJPA6252","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":2,"conf":"Demo","nota":""},{"vin":"31K113KA59T1SNHFC","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"D2X5X6A749Y1S1ZE2","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"4X23T5R79MLMKZD5C","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"BEIGE","llegada":"2025-12","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"5PDP0C5M3JWBHKAJW","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":10,"conf":"Demo","nota":""},{"vin":"UXERTT7Z2RKE0PL0S","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"Y12FRY4W5W8BH733W","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":14,"conf":"Demo","nota":""},{"vin":"UW8PL7UJ5VFYA8SLX","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":9,"conf":"Demo","nota":""},{"vin":"BZS58PZ13PXBGAE2Z","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":8,"conf":"Demo","nota":""},{"vin":"E8XMUTBL5SBPD25NV","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":4,"conf":"Demo","nota":""},{"vin":"5A55BY292DK8M1LA9","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"ZS1JN0EP7EF51238B","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"PXXB82YMX3CFY82T6","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":6,"conf":"Demo","nota":""},{"vin":"YRBS6CKK01UE9TZJC","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":1,"conf":"Demo","nota":""},{"vin":"ABXXD3YL9BKPKFZ04","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":6,"conf":"Demo","nota":""},{"vin":"Y2HCZHPE38ZB8FN8U","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"WFNJ7URWXGAZNKWDM","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"YEEND03F1L88JTWD6","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":12,"conf":"Demo","nota":""},{"vin":"7WKTGGSH78UHX6SLC","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"9T0NV2PJ29SGAGD8P","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"RFLKTB427VHFPRS9D","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"0KR2FBJH39PMT0KML","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":7,"conf":"Demo","nota":""},{"vin":"ZKYRT7CW6U0UJTA7G","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":6,"conf":"Demo","nota":""},{"vin":"GN4G0VSK0WY09SZ2Y","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":1,"conf":"Demo","nota":""},{"vin":"SEYGCPMW4F6MAX33C","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"WLEKWWTY3NFMWZ6Z4","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"GRIS PLATA","tapiceria":"NEGRO","llegada":"2025-12","estado":"DES","salida":3,"conf":"Demo","nota":""},{"vin":"DR131RBT3T4SRZPX4","dossier":"100011","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"BEIGE","llegada":"2025-12","estado":"DES","salida":8,"conf":"Demo","nota":""},{"vin":"8YZMK3VJ6YE3E9AS4","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":7,"conf":"Demo","nota":""},{"vin":"9A03N13Y3LX1NUPAX","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"3E9Y5UV021D880BDH","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":2,"conf":"Demo","nota":""},{"vin":"XTYL8UF8XK4F3V94A","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"FJG1UH458F50GC8WP","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"ETU0P99436X27HCKV","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"F9EDV62A7BM96PHP4","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":16,"conf":"Demo","nota":""},{"vin":"DJZ1ST9CX7BFFCP67","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"FVYMJHM96YLLR7RTT","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"DRLWE15P237XD1R67","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"YUANEFLW7MCK7GD1T","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":22,"conf":"Demo","nota":""},{"vin":"NTLHX2LJ378U0G8YL","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"FRDEVAUJ80MJ0T00L","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":22,"conf":"Demo","nota":""},{"vin":"9UPRWG0F1BEHXPA6J","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":8,"conf":"Demo","nota":""},{"vin":"K6B7GGMKX9XG91AEB","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":15,"conf":"Demo","nota":""},{"vin":"RD0YTE7J566NYNH2L","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"NEGRO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":9,"conf":"Demo","nota":""},{"vin":"YG01HJ8V01MXBXP6H","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"V6007NM08NWVSE3AP","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"EP99HSHV5NAUD4FUX","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"A93ZMANM9GPHU9X12","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"BE4HU9K48BBD41L00","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"EXY68PAS1Z1GGJN56","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":13,"conf":"Demo","nota":""},{"vin":"JZ0TKLLK7HHLW9G83","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"5ED7L2S73KH81ESRA","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":14,"conf":"Demo","nota":""},{"vin":"4HM5LV2S0TBFPTKEE","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":20,"conf":"Demo","nota":""},{"vin":"TW23M5G69XPB1RGPZ","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":21,"conf":"Demo","nota":""},{"vin":"2WEEEAE08KH89U5MG","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":21,"conf":"Demo","nota":""},{"vin":"MV5TJTWZ8X1GL5L7X","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":18,"conf":"Demo","nota":""},{"vin":"U41L4JJA5P1BAF6CP","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":12,"conf":"Demo","nota":""},{"vin":"15W9K6CX5JAUKN9C2","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":2,"conf":"Demo","nota":""},{"vin":"52GT02X14UHP593LX","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":5,"conf":"Demo","nota":""},{"vin":"MUSVB33F380UXL8DZ","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":3,"conf":"Demo","nota":""},{"vin":"6KYPFZ264VYFUM53S","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":1,"conf":"Demo","nota":""},{"vin":"Z0TSEG3HXLMH22Y22","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":6,"conf":"Demo","nota":""},{"vin":"HPC1M1UY50LRZ2W8X","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":1,"conf":"Demo","nota":""},{"vin":"CKU73EU242VHT5ACW","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"DES","salida":5,"conf":"Demo","nota":""},{"vin":"6ADS4JSAXZSF714Y7","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DEP","salida":null,"conf":"Demo","nota":""},{"vin":"VNEB5NNT5VBBEZP3A","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":10,"conf":"Demo","nota":""},{"vin":"2PUJKRS98VC1VJ1UE","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":7,"conf":"Demo","nota":""},{"vin":"USA3BYRZ5ASYFLGCX","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":19,"conf":"Demo","nota":""},{"vin":"4Y0EH6LP0S3FPPVAT","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":19,"conf":"Demo","nota":""},{"vin":"AFECHP168PFBDBJ4D","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":18,"conf":"Demo","nota":""},{"vin":"JNDLWLWD710MUW7NX","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":4,"conf":"Demo","nota":""},{"vin":"078FYX7J7T91PZTBN","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":11,"conf":"Demo","nota":""},{"vin":"TZLXZWGC1Z3B6GYGK","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":10,"conf":"Demo","nota":""},{"vin":"HFZGFSGF3UWWVK8YN","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":17,"conf":"Demo","nota":""},{"vin":"VBRMB9U47EUFH2193","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":9,"conf":"Demo","nota":""},{"vin":"2RCSGNAC3D2SRC3TC","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":15,"conf":"Demo","nota":""},{"vin":"5U9D5CC657RVYYRPP","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":8,"conf":"Demo","nota":""},{"vin":"9NL2AAMGX6TZG91JT","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"BLANCO","tapiceria":"","llegada":"2026-01","estado":"DES","salida":1,"conf":"Demo","nota":""},{"vin":"CRD59SCM9ETFYFYF4","dossier":"100116","deposito":"DEPA","marca":"MARCAUNO","modelo":"MOD-C","version":"INTELLIGENT","color":"VERDE","tapiceria":"","llegada":"2026-01","estado":"PUE","salida":null,"conf":"Demo","nota":""},{"vin":"WE95SKMW0XG94LC8H","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"LDV9CYDG192LRP4T6","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"10SVB7585H68F2H87","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"0TED7PXA17YM6XR4F","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":18,"conf":"Demo","nota":""},{"vin":"FS6AR2GN1FV0YSUYR","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"C234EKFEXNTG198TN","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"G85VE7JK074JBMCEH","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"07RE70983PN7NW6UR","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":17,"conf":"Demo","nota":""},{"vin":"XSDRUZL00UL55MAJF","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"4SKTHH1F2AKCZFWX5","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"NWP7YJ0Z8RU9J9B34","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"MCVUH507191VV2CT7","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"XP5ZW60F7PR4T0BUD","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"NEGRO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"Y03C4WRY97GM8G0NU","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"ROJO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"8CJY35V34XKMLZUDS","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"ROJO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"YCMD44NK19HHU592T","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"ROJO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"B21M1A0H2YJCNPBRV","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"ROJO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"6F5PCV5JXWXNE2BLA","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"ROJO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":16,"conf":"Demo","nota":""},{"vin":"GNSR7XHC7F96HSP5W","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"ROJO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"30ARHY2S3SYS1CWU7","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"76AD16RM91LGT5FW6","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"PAEFFM0A1396VZ0LG","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"98H0VPR14YUVF0H0X","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"JYHYL3B052ALN502T","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"RM6L0DB16X2C87NME","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"MMT9JL9X5J7HJUWWN","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"R5XJ085L2GFC9KUEM","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"HVPSN0WT5E6CNA3UB","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":21,"conf":"Demo","nota":""},{"vin":"BBR5F6SM0XYBJY0EE","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"BHDLVUWF75UADVRWF","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"7K1616NR3U9SJW2CR","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"GP5069Z92BZ2PLZ82","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"LK4M79PN7ZGTUZH7V","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"EAMFSAMRMTSBBHFFN","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":21,"conf":"Demo","nota":""},{"vin":"1PX4AWTJ2LVG4644N","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"GK3M9KXR71UKGMNL7","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"N598GBN53G4PWRMZ0","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"G7ELWKTG0DNSPFTTF","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"T8MTAW6R8S3HRAHYG","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"58BRPZCX332RW3E95","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"HSLV1BRN110S7TADG","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"47UM33PD76S9HF04A","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"AT8LN7JWXPK2AVB15","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"XRYEJDFVCVWLHFEWB","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"0M293HH69851G4R1N","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"J23E76YZ04XM7BL20","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":20,"conf":"Demo","nota":""},{"vin":"X712UHC5XNK51U0KL","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"4KUSHB3F55W5EGG2W","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"9B10J7FB9K9RFFNEJ","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"1W9H5S8034ET1MTS3","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-B","version":"PETROL","color":"GRIS OSCURO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":18,"conf":"Demo","nota":""},{"vin":"V35TSXDG4WDHG4EPU","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"ROJO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"8VM4BV6X0U9FG8YR0","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"ROJO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"HX99VW0S29US46TPJ","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"ROJO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"JAFTM0TN26MGWGM73","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"CN224N0V0292N1K9Y","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"6CFSEM0U67YW0MMLF","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"KP7YGKKR4VWFUP2A4","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"R16A51AG62TSBG639","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"MR45DHNE5057SYDE9","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":14,"conf":"Demo","nota":""},{"vin":"FS5VPD0C7B8K2K6UZ","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"2LNFY4NV0D909GCYT","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"66JE5XGPX0EH77TM9","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":15,"conf":"Demo","nota":""},{"vin":"TU45566XXMHSJPJP8","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"XC3MY3B06SAKT671J","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":18,"conf":"Demo","nota":""},{"vin":"YNY57CMD15EE5BB73","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"9F3RJD3S3W832D9AX","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"C4NRYABG34880G1XA","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"1T3E81G862G849BH7","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"WC3UA7SZ61GVDYWS2","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"P32JR00120JRPUHC9","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":19,"conf":"Demo","nota":""},{"vin":"B46K7WCV0KXDSBLTS","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"BLANCO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"R7P1HD4D8L9XPGF7T","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":14,"conf":"Demo","nota":""},{"vin":"1RXKGS51XK5MV0BU8","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"DHLA2EXY6K1JWCH69","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"K8HPKWRA8TGM5XJMX","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"TSHU3KJJ2DLR4LF53","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":18,"conf":"Demo","nota":""},{"vin":"2K5UTMJ06SBHNWAWX","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"GV6L5GFZ9MLPEAF2F","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"TRKU3GD43BVEVMJ3E","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":18,"conf":"Demo","nota":""},{"vin":"JS6D35HBXYNS4Z60J","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"1EV3VVHP0X5VN7W1F","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"H5E54T8T2GR9L94NA","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"71Y1HF2K239JVX56V","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"A9B7CR8J4K1XC0MRB","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":16,"conf":"Demo","nota":""},{"vin":"7JMT9B3B580P4B63N","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"FFRW1N309401GREWH","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"53Z3LS94XT1X85C89","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"PDLDZWFP78W53ECEM","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"PF1KW0EKX4RHCF8XC","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"2U05RUM61L6ZJ2ENW","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"0USGY1RX8A540W8RR","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"K7YEZXV39TYDFTLTF","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"DES","salida":22,"conf":"Demo","nota":""},{"vin":"WPZ7Z1FA41X8P4P8C","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"7PX7ATVJ7PV8MNW2Y","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"BGVZNKM30H0KGWT93","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"U6VYTARY9XN4TYBWV","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"A9UJP0H03H9M4TF58","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"W0CY3TM77YJSTGSSS","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"CNSJ8Z809NR47NCYC","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"FUZH8K9M6K1JWPY7F","dossier":"100263","deposito":"DEPB","marca":"MARCADOS","modelo":"MOD-A","version":"PETROL","color":"GRIS CLARO","tapiceria":"","llegada":"2026-03","estado":"SC","salida":null,"conf":"Demo","nota":""},{"vin":"7Y2PZB882N9H6RGYK","dossier":"DOS-2024","deposito":"DEPB","marca":"MARCATRES","modelo":"4WD","version":"MARCATRES 5","color":"","tapiceria":"","llegada":"2024-01","estado":"DEP","salida":null,"conf":"Demo","dvd":"99DEMOB3S2C1C6EDTN","nota":""},{"vin":"GNX0F3GC2167UYWBN","dossier":"DOS-2024","deposito":"DEPB","marca":"MARCATRES","modelo":"4WD","version":"MARCATRES 5","color":"","tapiceria":"","llegada":"2024-01","estado":"DEP","salida":null,"conf":"Demo","dvd":"99DEMOB3S2C1C6EDTN","nota":""},{"vin":"8MFPZ4NE3CJB85TUB","dossier":"DOS-2024","deposito":"DEPB","marca":"MARCATRES","modelo":"4WD","version":"MARCATRES 5","color":"","tapiceria":"","llegada":"2024-01","estado":"DEP","salida":null,"conf":"Demo","dvd":"99DEMOB3S2C1C6EDTN","nota":""},{"vin":"3UCUJ6PPXKBUJ830A","dossier":"DOS-2024","deposito":"DEPB","marca":"MARCATRES","modelo":"4WD","version":"MARCATRES 5","color":"","tapiceria":"","llegada":"2024-01","estado":"DEP","salida":null,"conf":"Demo","dvd":"99DEMOB3S2C1C6EDTN","nota":""},{"vin":"43D9G8C2X88MK92J9","dossier":"DOS-2024","deposito":"DEPB","marca":"MARCATRES","modelo":"2WD","version":"MARCATRES 5","color":"","tapiceria":"","llegada":"2024-01","estado":"DEP","salida":null,"conf":"Demo","dvd":"99DEMOTXUWAEBRG761","nota":""},{"vin":"3UUFSH60299MPJBFY","dossier":"DOS-2024","deposito":"DEPB","marca":"MARCATRES","modelo":"2WD","version":"MARCATRES 5","color":"","tapiceria":"","llegada":"2024-01","estado":"DEP","salida":null,"conf":"Demo","dvd":"99DEMOTXUWAEBRG761","nota":""},{"vin":"RXRHD3MC177P3WPK6","dossier":"DOS-2024","deposito":"DEPB","marca":"MARCATRES","modelo":"2WD","version":"MARCATRES 5","color":"","tapiceria":"","llegada":"2024-01","estado":"DEP","salida":null,"conf":"Demo","dvd":"99DEMOTXUWAEBRG761","nota":""}],"catalogo":[{"marca":"MARCADOS","modelo":"MOD-A","ref":"100263 · mar-26","pb":1781,"pn":1781,"imp":18120.0,"tte":1869.81,"seg":8.4,"thc":101.47,"t3":17.61,"plast":0.15,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 23","fuente":"Demo"},{"marca":"MARCADOS","modelo":"MOD-B","ref":"100263 · mar-26","pb":1681,"pn":1681,"imp":13860.0,"tte":1561.78,"seg":7.09,"thc":80.58,"t3":13.98,"plast":0.15,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 23","fuente":"Demo"},{"marca":"MARCAUNO","modelo":"MOD-C híbrido","ref":"100011 · dic-25","pb":1819,"pn":1819,"imp":15170.0,"tte":1846.04,"seg":26.08,"thc":104.41,"t3":18.12,"plast":0.16,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 60","fuente":"Demo"},{"marca":"MARCAUNO","modelo":"MOD-C","ref":"100116 · ene-26","pb":1748,"pn":1748,"imp":112890.0,"tte":1595.56,"seg":12.16,"thc":99.27,"t3":17.23,"plast":0.15,"mon":{"imp":"CNY","tte":"USD","seg":"EUR"},"partida":"8703 60","fuente":"Demo"},{"marca":"MARCAUNO","modelo":"MOD-C híbrido","ref":"100522 · 2025","pb":1340,"pn":1340,"imp":21670.0,"tte":2095.46,"seg":57.98,"thc":85.33,"t3":14.81,"plast":0.13,"mon":{"imp":"USD","tte":"USD","seg":"EUR"},"partida":"8703 60","fuente":"Demo"},{"marca":"MARCAUNO","modelo":"LINEA 600","ref":"100529 · sep-25","pb":1615,"pn":1615,"imp":11450.0,"tte":2107.26,"seg":58.8,"thc":86.54,"t3":15.02,"plast":0.15,"mon":{"imp":"USD","tte":"USD","seg":"EUR"},"partida":"","fuente":"Demo"},{"marca":"MARCAUNO","modelo":"LINEA 600","ref":"100536 · jul-25","pb":1441,"pn":1441,"imp":82550.0,"tte":2462.32,"seg":68.7,"thc":101.12,"t3":17.55,"plast":0.16,"mon":{"imp":"CNY","tte":"USD","seg":"EUR"},"partida":"","fuente":"Demo"},{"marca":"MARCAUNO","modelo":"LINEA 500","ref":"100529 · sep-25","pb":1298,"pn":1298,"imp":9440.0,"tte":1642.12,"seg":51.62,"thc":75.98,"t3":13.18,"plast":0.15,"mon":{"imp":"USD","tte":"USD","seg":"EUR"},"partida":"","fuente":"Demo"},{"marca":"MARCACUATRO","modelo":"MOD-D","ref":"100543 · mar-26 · CIF","pb":1306,"pn":1306,"imp":10820.0,"tte":0.0,"seg":0.0,"thc":96.87,"t3":16.81,"plast":0,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"","fuente":"Demo"},{"marca":"MARCACUATRO","modelo":"MOD-D ROYAL","ref":"100550 · dic-25","pb":1311,"pn":1311,"imp":10400.0,"tte":0.0,"seg":0.0,"thc":95.91,"t3":16.64,"plast":0.129,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"","fuente":"Demo"},{"marca":"MARCACUATRO","modelo":"MOD-F","ref":"100557 · abr-25 · CIF","pb":1329,"pn":1329,"imp":13810.0,"tte":0.0,"seg":0.0,"thc":99.63,"t3":17.29,"plast":0.15,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"","fuente":"Demo"},{"marca":"MARCACUATRO","modelo":"MOD-F","ref":"100564 · 2025","pb":1365,"pn":1365,"imp":119030.0,"tte":0.0,"seg":0.0,"thc":107.95,"t3":6.3,"plast":0.15,"mon":{"imp":"CNY","tte":"USD","seg":"USD"},"partida":"","fuente":"Demo"},{"marca":"MARCATRES","modelo":"5 4WD","ref":"2024","pb":2305,"pn":2303,"imp":39350.0,"tte":2224.8,"seg":35.23,"thc":185.57,"t3":0.0,"plast":0,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 80","fuente":"Demo"},{"marca":"MARCATRES","modelo":"5 2WD","ref":"2024","pb":2153,"pn":2150,"imp":48660.0,"tte":2160.2,"seg":34.21,"thc":180.18,"t3":0.0,"plast":0,"mon":{"imp":"USD","tte":"USD","seg":"USD"},"partida":"8703 80","fuente":"Demo"}],"historico":[["DEPA","100550","MARCACUATRO MOD-D ELITE/ROYAL","85 (53 puerto + 2 País X + 30 DVD)","36/2025 → 12/2026"],["DEPA","100557","MARCACUATRO MOD-F","20","1 salida"],["DEPA","100571","MARCAUNO MOD-C","7","19/2025"],["DEPA","100522","Demo","10","29/2025 → 27/2026"],["DEPA","100578","14 híbridos + 10 combustión","24","11–13/2025"],["DEPA","100585","MARCACUATRO MOD-F","10","14–15/2025"],["DEPA","100536","MARCAUNO LINEA 600","18","20/2025 → 38/2025"],["DEPA","(s/n)","Demo","40","15/2025, 17/2025"],["DEPA","100592","Demo","50","5/2025 → 10/2025"],["DEPA","100599","Demo","50","1/2024 → 9/2025"],["DEPA","100529","MARCAUNO LINEA 600 + 500","27","25/2025 → 21/2026"],["DEPB","100543","Demo","45","32/2026 → 56/2026"],["DEPB","100613","MARCACUATRO X3 + X6 · sep-25","150",""],["DEPB","100564","MARCACUATRO MOD-F","49",""],["DEPB","100620","Demo","63",""],["DEPB","100627","MARCAUNO MOD-C","69",""],["DEPB","(sep-24)","Demo","92",""],["DEPB","(sep-24)","Demo","100",""],["DEPB","(ago-23)","MARCAUNO F500","114",""]],"historicoVin":[["7LCZPYHP0GHYKDUA8","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["3DJY43E4802K4T0WF","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["5BXH285M70CSAKDV6","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["XDSS5T757HRM0HZ6K","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMODJ8RCBDAZWGZ/R3W"],["D4PE57JG433S9HR5Y","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOASK5GEKU2TAD/Z58"],["PXF5MYEX6HT3M9YC5","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMO2MSLDGANK3N9/3M9"],["HXPLWK9U0U5KVT5PL","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["N5JPYM2W772K0D4TM","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["YP1UJJ067PJMYTA4M","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["ETFPGV8X5VUZDHCBL","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["TF4NS8Y67WTH2ZWGN","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMO146F5MRGTRCH/YTD"],["XVUUFRCF1ZM4YUSL9","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["VMHMBS0907J36LC0F","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["BXKBDMJW3G9L3KVXM","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMODJ8RCBDAZWGZ/R3W"],["J5L52MJW0JXS20FY6","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["GHTGKYX33GGM3TXDK","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMO146F5MRGTRCH/YTD"],["UH0ZYK669YWX9GXDZ","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["2Z05UJEW8N4CCVM3F","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["JSGJ5ASD3ASK1KL27","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["UARXW8C01J5JYA8KA","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["Y720B8CH3EF2XRT5F","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["55WZ8P4E2H9ZJ4PSR","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["SRYB2UVD23W1WL766","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMO146F5MRGTRCH/YTD"],["V2CG6XM948MRU0HYA","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMODJ8RCBDAZWGZ/R3W"],["ZZ1HYYYW9MBE6XR9G","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["A0P3TYTB9T0E1TBZ3","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["BVTB0DDS3GYETZGKE","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["65SMUY7T7NFBDK5YM","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMO146F5MRGTRCH/YTD"],["33V4NAFJ1T5MAB0XB","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["D4TSSG5P5RGRRG5HX","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["4X7L27LX45MGG58GE","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMO146F5MRGTRCH/YTD"],["S0JF3771X48M6VGLY","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["0RSS52983KPRZYEEW","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["H7M66A2EX4NBJNZ3X","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["PZNTNASX3DCWAGB13","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["5ZB5KCL63U6BVYZBE","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["E5A3H7FH0A1FS2RHX","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMO146F5MRGTRCH/YTD"],["A3LAFMRR3XY2DZ4J9","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["8NWANY3P4RWCY1R31","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["EFGGWH8D0CPCJR32S","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["UZKY6M5T06DWPR7W0","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMODJ8RCBDAZWGZ/R3W"],["AJEHRJBL6LAT01P7A","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["TSXJ3T0X7KB9W8ARF","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["76P7JH965AXMN1EBN","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOK0YF5RMDVTWX/ACR"],["WEHL5ZHN2UNT2H3RT","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["13G4MLJU2KP8LPSMK","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["2E7ZXFRE3BGFG0S3Y","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMO146F5MRGTRCH/YTD"],["024LCWPP725R47RE8","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMO146F5MRGTRCH/YTD"],["43UW4T8C18Z9B7LWW","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["G87EEL55479UY1J6B","99DEMONJ8VLREZTLXU/6KT97","MARCACUATRO","MOD-D","99DEMOCNM2LUX1LTHD/05G"],["F0VKZXX32AKJP0R2Y","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["1J5CSYCK0W038V190","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["NURR8UM89P7E39TEH","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["GZ8R7F708K8JDLN8K","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["R7U6AG2T69VGVDTLS","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["J96J7AKP9WVDX6ER1","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["T5KTHJS945LGX6X1M","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["MKU2A7GE64LRGRSDX","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOGSPPHCCFV7GJ/GPV"],["FE1ZGCJ9X75XFXFH2","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["GYDSTDYZX7S8HPPJA","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOTVD0X97VB3B4/GZ7"],["JAAEMTTP9GYSAMN39","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["CHGRMDFG3T12Z7CSE","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["5D04614M7X7AKB9TX","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["86FVHTJ96R18SZYTJ","99DEMO9ALTSNLXN1YS/177AB","MARCAUNO","S508","99DEMOLKCBHGLZKBBC/JCE"],["W0SWEBBW15TWL10RF","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOGXZG22F4B0PW/T49"],["6GHPTCW8137BZVC6D","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOGXZG22F4B0PW/T49"],["82AXZNFB67ZSLF2B0","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOZXK5XL65TRJY/6S9"],["1G9CC15B5CZHFLNFU","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOZXK5XL65TRJY/6S9"],["63YKMZAH35GXMYK6C","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOZXK5XL65TRJY/6S9"],["PKGE108F5MK8XTWR6","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOGXZG22F4B0PW/T49"],["U3WRLLV741EU7DUWG","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOGXZG22F4B0PW/T49"],["FG8KXD471ME7JWVH9","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOZXK5XL65TRJY/6S9"],["68J1BZ1C99E0L8SV5","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOGXZG22F4B0PW/T49"],["HLUVRTA310EU8495E","99DEMOANVDAZ8G8M8Z/9TLVP","MARCAUNO","LINEA600","99DEMOZXK5XL65TRJY/6S9"],["DZEKD8TR0YBYU9NGG","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMO16CA24R9V6BK/T2A"],["ZVE9H6S08DSEP14W0","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMO16CA24R9V6BK/T2A"],["0XPAE8EN297ANPDX9","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMOH64XTG3S2LT4/76B"],["LJ0JZN6M7EX7NV7DD","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMO16CA24R9V6BK/T2A"],["D6XEMZ105P56U7KPK","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMO16CA24R9V6BK/T2A"],["9F24CD3J1KT93G643","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMO16CA24R9V6BK/T2A"],["X2UD9NJZ0ZCZ0MW4P","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMO16CA24R9V6BK/T2A"],["XHU83YVR3Z43FVH7K","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMO16CA24R9V6BK/T2A"],["ZMMYRRSM6KTFE845F","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMO16CA24R9V6BK/T2A"],["070HEF2E4W09TBPJE","99DEMOXZLSXNTGLGN1/KKWW4","MARCACUATRO","X6PRO","99DEMO16CA24R9V6BK/T2A"],["9S06L4BJ70VUX4J4K","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["8UNHU4VU1EPKXDFK8","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["P1M9WNDR2JC9F8ZH9","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["7X2C39C19CVM1DNCJ","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["L9B1BLRH1MA38CP7F","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["PH2E6RC6817F4V6C2","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["09ST8DHK2A862V4PC","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["AS6GJFCR0J03B09H3","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["6M3MH5F700GFM06N7","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["K7MPY9S5XW82A32R7","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["4708APZV6LPEFPZKF","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["KCU9XMWN7RHHAF5WM","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["M3MFKE3C869BUE1T7","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["EKL7LAX05JNECDLNT","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["AHPZXF976Z5H89EL8","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["ESLLPXHR9YBXE00F0","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["V9ZS2TJR6BKUFYA79","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["7E9KTT8P1R60AUUAH","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["87V95EL83WTH2BETS","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["CN62XL283PT8LYUE9","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["MA5V4PZ61EVT6KCW3","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["JT9405ZAXFAT3GESN","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["XECFSYRJ35MJFS7FA","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["CH5JUJZX419TVW3XH","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["M9GV0ZEG5U2X6J5VV","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["UMHBSJ0BXVW8ESP9A","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["T7KH9YFJ2GC8SWH2F","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["7CH0RJCG7KV8R27P1","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["MDY9P8TU3P6A2KP9D","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["696AAC4H23XVZP8V6","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["SW09XLV15XK735Z06","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMOJEN7RKZ36VJ7/ZRU"],["3290M0JA3NXYM78J3","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["RSXAXUBP1TS2KABRD","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["FV4KERLM2SECFPNMC","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["FVKELJF19GAVYCCGJ","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["9N1UPHKJ76TLBNTC7","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["05AL0J362CN83PY2B","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["RWP6R9JF3G15L8FZH","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["BM2WKJKJ7FTT8W2FW","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMOJEN7RKZ36VJ7/ZRU"],["DAXEV3FE1HYPKMR3K","99DEMOGCTPLNZG6P79/B0Y36","MARCACUATRO","X3PRO","99DEMODTU12DAE33ZT/GRW"],["ZM14AF3D0HJMHWXSB","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["HNN2CF706MFEB2HS9","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["ZTB6T4W102F3JG29U","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["2A1DNSRB7MWZHBFGZ","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["E5BCNXXK2FA23MZPT","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["MY536HRE8M70758SA","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["WPC2YT3K73KZN8Y3Y","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["CPJ6DFM1640DTRPSX","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["AG83YAZ38YNYMRX80","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["8H3RA8H618EGZLC4N","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["U70MJUXY9BSFWXGNS","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["D73PMH5SXJGVJE7BK","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["5PTNW6ND4AD8GJM4B","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["DTN8YZGU2ED9SDZRK","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["FV57HAHTXTYZ4T54R","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["ZYD1WPNA9UKY6EXJ8","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["J4U1KVGD025BKJBSU","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["LR7A8C8E79YRK4HKH","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["XU32DRDX3YX1WA0L7","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["1UV227KY39GK3BU1F","99DEMOUZSWX784F0KW/1DFXJ","MARCACUATRO","X6PRO","99DEMOTGKRM5ZKP2LF/WN8"],["VP6XBESY4MR8JUXXK","99DEMO3RJ78D76K8S8/LALX6","MARCAUNO","MOD-C","99DEMOEM0BBCYG978K/CP3"],["UF37W1ZB18A8L5680","99DEMO3RJ78D76K8S8/LALX6","MARCAUNO","MOD-C","99DEMOEM0BBCYG978K/CP3"],["HR6PYDVU2V7VEC0L2","99DEMO3RJ78D76K8S8/LALX6","MARCAUNO","MOD-C","99DEMOEM0BBCYG978K/CP3"],["J0R1L95V4BBH4W7JK","99DEMO3RJ78D76K8S8/LALX6","MARCAUNO","MOD-C","99DEMOEM0BBCYG978K/CP3"],["4R06E3J74BVJLKCEV","99DEMO3RJ78D76K8S8/LALX6","MARCAUNO","MOD-C","99DEMOEM0BBCYG978K/CP3"],["BGWXXAVF60YR20RN4","99DEMO3RJ78D76K8S8/LALX6","MARCAUNO","MOD-C","99DEMOEM0BBCYG978K/CP3"],["57WK7RG24400K1MAY","99DEMO3RJ78D76K8S8/LALX6","MARCAUNO","MOD-C","99DEMOEM0BBCYG978K/CP3"],["WZAKCW6V00AY8FK7L","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMOWJFC22D2WGAC/N7D"],["48X787YP51AG1Z4CV","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMO6MGMC3GA0JWT/WM3CX"],["EP02C53H8KP869086","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMO325EA1K73GF7/PKA"],["48SMSC1X5N08GURAW","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMOWJFC22D2WGAC/N7D"],["BER18115803V0YK3P","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMOHJ7BUS5MD0KF/V86"],["DMF9WJ189TH95MAZU","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMOHJ7BUS5MD0KF/V86"],["MDDXT0N1XCE34A33Z","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMOF1WWL8DX057L/KH0"],["S3MAL3J70WNTGCGWU","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMOHJ7BUS5MD0KF/V86"],["XM5VE0EX3KVC48GJD","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMOYVUDYAKW4S11/1R5"],["XYEUKGL21DFZC6X99","99DEMOPV4Y4TDVVZ82/Y9U9Z","MARCAUNO","LINEA600","99DEMOLCVKKU8ZF81N/RWD26"],["82W2ZZY4XPFZN7RVH","99DEMOZER2TX79NNPN/FMV0Z","MARCAUNO","LINEA600","99DEMOG06FKXBZUBGC/P8P"],["SH8NSR7R6YU26N68F","99DEMOZER2TX79NNPN/FMV0Z","MARCAUNO","LINEA600","99DEMOTCYNM1FBDC06/8E2HF"],["2NW8DN925T8TVDS80","99DEMOZER2TX79NNPN/FMV0Z","MARCAUNO","LINEA600","99DEMOM5L0SRMCTZDB/DT97D"],["EEHG763GXPF5GT59D","99DEMOZER2TX79NNPN/FMV0Z","MARCAUNO","LINEA600","99DEMO5G7X0T1H071L/5SK"],["BRN5LFHH9DEYL1RBG","99DEMOZER2TX79NNPN/FMV0Z","MARCAUNO","LINEA600","99DEMOM5L0SRMCTZDB/DT97D"],["JMX6Y69AX0FDAK2L6","99DEMOZER2TX79NNPN/FMV0Z","MARCAUNO","LINEA600","99DEMOE0J5G1BE5YXR/7H0"],["LH9XEFJ74HY4C98J1","99DEMOZER2TX79NNPN/FMV0Z","MARCAUNO","LINEA600","99DEMOE0J5G1BE5YXR/7H0"],["DTGCTP9J3WPZRF4G0","99DEMOZER2TX79NNPN/FMV0Z","MARCAUNO","LINEA600","99DEMOE0J5G1BE5YXR/7H0"],["VVK39UDV4JDV04HXV","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOP7VHTN04TSSG/1V3LD"],["G1H5B2MN52EWGX13P","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMO9J5AVM04C3PU/MJMRM"],["4BM4ZXCB4CKUJGXLF","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOPJNWNAE3DZYV/8FA37"],["WU3896DW0WNCRC4HK","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOPJNWNAE3DZYV/8FA37"],["ZL1A2E590FCH0N6HL","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOL0AZ5EHZSX1D/VG859"],["JV74F90360EL6K7GY","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOPJNWNAE3DZYV/8FA37"],["CP4GKNN2172SY1D79","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOMLGWTBBGNTB6/S5GZG"],["4AG6V25874F2XNXKE","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMO9UHHH2JRRK62/LB13C"],["TXZ9NXCJ5J2DDU3M9","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOY4X2DXKZS4A0/GMEX4"],["WHAYE03Y8GM6TMKZB","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOY4X2DXKZS4A0/GMEX4"],["06HG4X366KLDSKUXF","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMO26CCCUUCGTHA/4SCVH"],["0T6YT3JM64KLMVAD8","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOUF6K5H9JV3VU/SFV6R"],["2F7YBLZJ0K1Z8FN2Z","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMO7WBSYRN912AZ/LSXX8"],["81UYWGTG331255GFB","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOLEZ5D15ZGRK3/YZJNU"],["YWNKE2FR8R4PDKAVP","99DEMOK5KU33SKBUVY/LT8GX","MARCAUNO","LINEA 600","99DEMOA3H82K3UH156/VZVZ2"],["T62M3MVZ69S4T9MDM","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMO16ZCZ5AERG30/92KN3"],["ZDR17C0H6KEURGN3N","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMO0X0EW9MHVY93/LV9P9"],["XDXNEZ160SWL2Y696","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMOC3AAWAW2GABN/M8U9K"],["HY7EW8M362743EYMT","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMOGBGEL864DAXK/SZULC"],["5855BRB29W9AW25DC","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMO0X0EW9MHVY93/LV9P9"],["KKGU16V585FA4GRAV","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMO1BDR2C5DSSRC/LMXA6"],["A08ZGGFTXE51G7UEP","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMO1R3W28BSFMLZ/1MAV2"],["ZRV42GCJ6P3XTCZZ3","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMOEH4ZS1N6VZS4/CUBYK"],["20ZS5YL6400M45U09","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMO16ZCZ5AERG30/92KN3"],["L1YNFRR2XJFCW4RX0","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMO1R3W28BSFMLZ/1MAV2"],["9HD1YA341WC0PZ64J","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMO16ZCZ5AERG30/92KN3"],["B72T4ZV22AHJA5765","99DEMOWMWK41RFYXSX/P4ABD","MARCAUNO","LINEA500","99DEMO1R3W28BSFMLZ/1MAV2"],["VBGA7D8X0DRWS4FVG","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMOPJH9FU1BKWA1/FMRXN"],["4VRPBUU70BD64GFEZ","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMOEWFRVJ2VZ26J/UMB0Z"],["X87MF6BAX236J964Y","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMOGMVHURC2CL4N/WK1CW"],["KBMLCVH93YM1LGR35","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMOAHVCDSHCXPZF/32RUF"],["H6GK0YRK7H5SN5HNE","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMO9DP49J8NCTML/STSDL"],["JRDHFJU4419SVD69H","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMOPJH9FU1BKWA1/FMRXN"],["6Z1CJW4K0M81VT4PP","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMOPJH9FU1BKWA1/FMRXN"],["V3RWU93ZXSX0VL5B5","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMOJJ87SSA95JZW/JKSYH"],["ST2SE23Z7M6H4URK9","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMOEWFRVJ2VZ26J/UMB0Z"],["35JW5GWC4JZ3Y11NK","99DEMO56SL0ZP21PW7/9PR5J","MARCAUNO","MOD-C","99DEMOHVA08PCDUWNH/W5HLX"],["X05XA667XBEJC594X","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["N33Y40P6809Z8R36G","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["SRTVUCBS3WWM9M3EM","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["RZ2FV0MK9RWSSJAL9","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["7PRP1GPX5GRZ8NSM8","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["5KVSBB4P52T277PKB","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["GX0V402RXE3U3RNDR","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["J20RBR535JLML46DP","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["JX60BC0U9LH34KBKZ","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["RSL6JBM474YGLTPVU","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["DJ4MWUS929GP3TTMD","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["7Y3J8VGFXU6S3EZR6","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["CWGCH13K5VX3HH2TW","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["4L7H3Z0B53R9B4NMX","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["JXR3D3KS7MNCZZ22Z","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["V0V8T7WB05A0HFYDA","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["HCYU9FR4XEW6FAD50","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["ZSHUJP2684Y5UL0UU","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["TME4WXAH0VBU50VWV","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["GYMGTN2X60AABM3BN","99DEMOCA68FYTG848N/XAZFV","MARCACUATRO","MOD-D ELITE","99DEMO2KV0MLGWX1MZ/XR0J0"],["7XA7P86L370FR3FLR","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMO94KVED93YE5A/ML1VA"],["X5NYYA1G7UX1K3YX0","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMO94KVED93YE5A/ML1VA"],["4N1E4Z0R9ECLYVUWE","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMO94KVED93YE5A/ML1VA"],["0382A79Z0MPJFEVCC","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMO64K2FDYW307J/WYBNR"],["3FHS95VB8WHTJ10R0","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMOS52THRMNHRTG/NT8R6"],["C5HT1D3W2XS7XFRPX","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMO5J99H9G62LN7/FJ0D2"],["AUKLGSUZ42ELDPD9A","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMOS52THRMNHRTG/NT8R6"],["VVB3Y84P7FT6E7078","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMOS52THRMNHRTG/NT8R6"],["SWZ8RWVM44M4JT7FG","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMO64K2FDYW307J/WYBNR"],["NSDCL7C94BECJD9Z5","99DEMODP848LWFKRLJ/52FC5","MARCACUATRO","MOD-D ROYAL","99DEMO6WHJ4FNHZL0Y/ATHS0"]],"avisos":[{"nivel":"info","txt":"Datos de demostración: todos los nombres, identificadores y referencias son ficticios."},{"nivel":"alerta","txt":"Ejemplo de aviso: saldo pendiente de confirmar en el depósito."}],"log":[]}</script>
+<script>
+(function(){
+'use strict';
+/* =====================================================================
+   CLIENTE · DEPÓSITOS ADUANEROS (AGENTE)
+   Estado: data/estado.json (artifact) o bloque embebido (copia local).
+   Regla de oro de los cuadros: salida = unidades × valor unitario del DVD;
+   saldo = entrada − Σ salidas. Divisas nunca se convierten ni se mezclan.
+   ===================================================================== */
+const KEY='control_depositos_v6';
+const YEAR=String(new Date().getFullYear());
+let S=null, MODE='artifact', ART=null, DL=null, READONLY=false, SEED_ID='', artReady=null, dlReady=null;
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const NF={}; function nf(d){return NF[d]||(NF[d]=new Intl.NumberFormat('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d}));}
+const f2=v=>v==null||isNaN(v)?'—':nf(2).format(v);
+const f0=v=>v==null||isNaN(v)?'—':nf(0).format(v);
+const fkg=v=>v==null||isNaN(v)?'—':new Intl.NumberFormat('es-ES',{maximumFractionDigits:2}).format(v);
+const r2=v=>Math.round(v*100)/100;
+const tsvn=v=>{ if(v==null||isNaN(v)) return ''; const x=Math.round(v*1e6)/1e6; return String(x).replace('.',','); };
+const hoy=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
+const fdate=s=>{ if(!s) return ''; const m=/^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(s); if(!m) return s; return m[3]?`${m[3]}/${m[2]}/${m[1]}`:`${m[2]}/${m[1]}`; };
+const hora=()=>new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+const VINRX=/\b[A-HJ-NPR-Z0-9]{17}\b/g;
+const ESTADOS={DEP:'EN DEPÓSITO',DES:'DESPACHADO',PUE:'PUERTO',SC:'SIN CONFIRMAR'};
+const MON_LBL={USD:'USD',CNY:'CNY',EUR:'€'};
+
+/* ---------- consultas ---------- */
+const dossier=id=>S.dossiers.find(d=>d.id===id);
+const salidasUds=(d,k)=>d.salidas.reduce((a,s)=>a+(s.uds[k]||0),0);
+const saldo=(d,k)=>d.modelos[k].uds-salidasUds(d,k);
+const saldoDossier=d=>Object.keys(d.modelos).reduce((a,k)=>a+saldo(d,k),0);
+const abierto=d=>saldoDossier(d)>0;
+const vehDe=id=>S.vehiculos.filter(v=>v.dossier===id);
+const vehByVin=vin=>S.vehiculos.find(v=>v.vin===vin);
+const depStock=dep=>S.dossiers.filter(d=>d.deposito===dep).reduce((a,d)=>a+saldoDossier(d),0);
+const nextSS=dep=>(S.depositos[dep].ultSS[YEAR]||0)+1;
+const nextSE=dep=>(S.depositos[dep].ultSE[YEAR]||0)+1;
+const ssNum=s=>{const m=/^\s*(\d+)\s*\/\s*(\d{4})/.exec(s||'');return m?{n:+m[1],y:m[2]}:null;};
+function vals(m,n){return {uds:n,pb:n*m.pb,pn:n*m.pn,imp:n*m.imp,tte:n*m.tte,seg:n*m.seg,thc:n*m.thc,t3:n*m.t3,plast:n*m.plast};}
+function sumVals(a,b){const o={};for(const k of ['uds','pb','pn','imp','tte','seg','thc','t3','plast'])o[k]=(a[k]||0)+(b[k]||0);return o;}
+function monOf(d,f){const ks=Object.keys(d.modelos);const s=new Set(ks.map(k=>d.modelos[k].mon[f]));return s.size===1?[...s][0]:'MIXTA';}
+function salidaDe(v){ if(v.salida==null) return null; const d=dossier(v.dossier); return d? d.salidas.find(s=>s.n===v.salida)||null : null; }
+function confVin(d,k){ const vs=vehDe(d.id).filter(v=>v.modelo===k); return {dep:vs.filter(v=>v.estado==='DEP').length, sc:vs.filter(v=>v.estado==='SC').length}; }
+function modeloPorVin(v){
+  if(v.startsWith('DEMOAAAA')) return {marca:'MARCADOS',modelo:v.slice(9,11)==='TT'?'MOD-B':'MOD-A'};
+  if(v.startsWith('DEMOBBB')) return {marca:'MARCACUATRO',modelo:'MOD-D'};
+  if(v.startsWith('DEMOCCC')) return {marca:'MARCACUATRO',modelo:'MOD-D ROYAL'};
+  if(v.startsWith('DEMODDD')) return {marca:'MARCACUATRO',modelo:'MOD-F'};
+  if(v.startsWith('DEMOE')||v.startsWith('DEMOFFFF')) return {marca:'MARCAUNO',modelo:'MOD-C'};
+  if(v.startsWith('DEMOGGG')) return {marca:'MARCAUNO',modelo:'LINEA 600'};
+  if(v.startsWith('DEMOHHH')) return {marca:'MARCAUNO',modelo:'LINEA 500'};
+  if(v.startsWith('DEMOIII')) return {marca:'MARCATRES',modelo:'5 4WD'};
+  if(v.startsWith('DEMOJJJ')) return {marca:'MARCATRES',modelo:'5 2WD'};
+  return null;
+}
+const VW={'0':0,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,A:1,B:2,C:3,D:4,E:5,F:6,G:7,H:8,J:1,K:2,L:3,M:4,N:5,P:7,R:9,S:2,T:3,U:4,V:5,W:6,X:7,Y:8,Z:9};
+const WG=[8,7,6,5,4,3,2,10,0,9,8,7,6,5,4,3,2];
+function vinCheck(v){ if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(v)) return false; let s=0; for(let i=0;i<17;i++) s+=VW[v[i]]*WG[i]; const r=s%11; return v[8]===(r===10?'X':String(r)); }
+function vinHtml(v){ return esc(v.slice(0,11))+'<b>'+esc(v.slice(11))+'</b>'; }
+
+/* ---------- UI básica ---------- */
+function toast(msg,kind){ const t=document.createElement('div'); t.className=kind||''; t.textContent=msg; $('#toast').appendChild(t); setTimeout(()=>t.remove(),5200); }
+function setSave(cls,txt){ const e=$('#saveState'); e.className='save '+(cls||''); e.textContent=txt; }
+function copyText(txt,btn){
+  const done=()=>{ toast('Copiado al portapapeles','ok'); };
+  try{ navigator.clipboard.writeText(txt).then(done,()=>fallback()); }catch(e){ fallback(); }
+  function fallback(){ const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); let ok=false; try{ok=document.execCommand('copy');}catch(e){} ta.remove(); ok?done():toast('Selecciona el texto y cópialo a mano (Ctrl+C).','bad'); }
+}
+function modal(title,bodyHtml,actions){ // actions: [{label,cls,fn}]
+  const host=$('#modalHost');
+  host.innerHTML=`<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="box"><div class="bh"><h3>${esc(title)}</h3></div><div class="bb stack">${bodyHtml}<div class="row" style="justify-content:flex-end" id="mAct"></div></div></div></div>`;
+  const act=$('#mAct');
+  const close=()=>{host.innerHTML='';};
+  (actions||[{label:'Cerrar'}]).forEach(a=>{ const b=document.createElement('button'); b.className='btn '+(a.cls||''); b.textContent=a.label; b.onclick=async()=>{ if(a.fn){ b.disabled=true; const keep=await a.fn(); if(keep===true){b.disabled=false;return;} } close(); }; act.appendChild(b); });
+  $('.modal',host).addEventListener('click',e=>{ if(e.target.classList.contains('modal')) close(); });
+  setTimeout(()=>{ const b=act.querySelector('button:last-child'); b&&b.focus(); },20);
+}
+
+/* ---------- guardado ---------- */
+function setReadOnly(){
+  READONLY=true; setSave('ro','Solo lectura');
+  const b=$('#roBanner'); b.hidden=false;
+  b.innerHTML='<div class="note">Vista de solo lectura: puedes consultar stock y cuadros y generar los textos de despacho, pero no registrar movimientos. Pide acceso de edición al artifact para guardar.</div>';
+  renderAll();
+}
+async function guardar(motivo){
+  S.generado=new Date().toISOString();
+  S.log=S.log||[]; S.log.unshift({t:S.generado,txt:motivo});
+  if(S.log.length>400) S.log.length=400;
+  if(MODE==='artifact'){
+    if(!ART && artReady){ try{ await artReady; }catch(e){} }
+    if(!ART){ setReadOnly(); toast('Esta vista no puede guardar cambios.','bad'); return false; }
+    setSave('','Guardando…');
+    try{
+      await ART.publish({'data/estado.json':{content:JSON.stringify(S),contentType:'application/json'}});
+      setSave('ok','Guardado '+hora()); return true;
+    }catch(e){
+      const c=e&&e.code;
+      if(c==='conflict'){ toast('Otra persona guardó antes que tú. La página se recarga con su versión; repite la operación.','bad'); setSave('','Recargando…'); return false; }
+      if(['not_writer','not_granted','capability_disabled','not_declared','consent_required','capability_removed'].includes(c)){ setReadOnly(); return false; }
+      if(c==='rate_limited'){ toast('Demasiados guardados seguidos. Espera unos segundos y repite.','bad'); setSave('','Sin guardar'); return false; }
+      toast('No se ha podido guardar ('+(c||'error')+'). Repite la operación.','bad'); setSave('','Sin guardar'); return false;
+    }
+  }
+  try{ localStorage.setItem(KEY,JSON.stringify({seed:SEED_ID,estado:S})); setSave('ok','Guardado en este navegador · '+hora()); return true; }
+  catch(e){ toast('El navegador no permite guardar aquí. Exporta el estado desde Fuentes y datos.','bad'); return false; }
+}
+async function commit(motivo,mutator){
+  if(READONLY){ toast('Vista de solo lectura: no se puede registrar.','bad'); return false; }
+  const prev=JSON.stringify(S);
+  try{ mutator(S); }catch(e){ S=JSON.parse(prev); toast('Error al aplicar: '+e.message,'bad'); return false; }
+  const ok=await guardar(motivo);
+  if(!ok){ S=JSON.parse(prev); }
+  renderAll(); return ok;
+}
+
+/* ---------- descargas ---------- */
+async function saveFile(name,data){
+  if(MODE==='artifact'){
+    if(!DL && dlReady){ try{ await dlReady; }catch(e){} }
+    if(!DL){ toast('Las descargas no están disponibles en esta vista.','bad'); return; }
+    try{ await DL.save({filename:name,data}); }catch(e){ if(e&&e.code==='declined') return; toast('Descarga no realizada ('+(e&&e.code||'error')+').','bad'); }
+    return;
+  }
+  const blob=data instanceof Blob?data:new Blob([data],{type:'application/octet-stream'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+}
+let xlsxP=null;
+function loadXLSX(){ if(window.XLSX) return Promise.resolve(window.XLSX); if(xlsxP) return xlsxP;
+  xlsxP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload=()=>res(window.XLSX); s.onerror=()=>{xlsxP=null;rej(new Error('No se pudo cargar el lector de Excel'));}; document.head.appendChild(s); });
+  return xlsxP; }
+
+/* =====================================================================
+   NAVEGACIÓN
+   ===================================================================== */
+let VIEW='panel';
+function go(v){ VIEW=v; $$('#nav button').forEach(b=>b.setAttribute('aria-current',b.dataset.v===v?'page':'false')); $$('.view').forEach(s=>s.classList.toggle('on',s.id==='v-'+v)); renderView(v); window.scrollTo(0,0); }
+document.addEventListener('keydown',e=>{
+  if(e.altKey||e.ctrlKey||e.metaKey) return;
+  const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable)) return;
+  const map={'1':'panel','2':'stock','3':'cuadros','4':'despacho','5':'llegada','6':'aeat','7':'valores','8':'fuentes'};
+  if(map[e.key]&&S){ e.preventDefault(); go(map[e.key]); }
+  if(e.key==='Escape') $('#modalHost').innerHTML='';
+});
+function renderTick(){
+  const t=depStock('DEPA'), s=depStock('DEPB');
+  $('#tick').innerHTML=`<span>CORTE <i>${esc(fdate(S.corte))}</i></span><span>DEPA <em>${t}</em></span><span>DEPB <em>${s}</em></span><span>TOTAL <i>${t+s}</i></span>`+
+   `<span>S/S DEPA <i>${S.depositos.DEPA.ultSS[YEAR]||0}/${YEAR}</i></span><span>S/S DEPB <i>${S.depositos.DEPB.ultSS[YEAR]||0}/${YEAR}</i></span>`;
+}
+function renderAll(){ if(!S) return; renderTick(); renderView(VIEW); }
+function renderView(v){ ({panel:rPanel,stock:rStock,cuadros:rCuadros,despacho:rDespacho,llegada:rLlegada,aeat:rAeat,valores:rValores,fuentes:rFuentes})[v](); }
+
+/* =====================================================================
+   1 · PANEL
+   ===================================================================== */
+function rPanel(){
+  const el=$('#v-panel');
+  el.innerHTML=`<div class="vh"><div><h1>Situación de los depósitos</h1><p>Saldos por dossier según los cuadros de Carpeta, verificados contra el export AEAT, los certificados del depósito y los correos de levante. Corte ${esc(fdate(S.corte))}.</p></div>
+   <div class="row"><button class="btn pri" data-go="despacho">Nuevo despacho</button><button class="btn" data-go="llegada">Registrar llegada</button></div></div>
+   <div class="grid g2">${depBox('DEPA')}${depBox('DEPB')}</div>
+   <div class="grid g2" style="margin-top:12px">${movBox()}${avisosBox()}</div>`;
+}
+function depBox(dep){
+  const D=S.depositos[dep]; const n=depStock(dep);
+  const ds=S.dossiers.filter(d=>d.deposito===dep&&abierto(d));
+  let rows='';
+  ds.forEach(d=>Object.keys(d.modelos).forEach(k=>{
+    const m=d.modelos[k], sd=saldo(d,k); if(sd<=0) return;
+    const c=confVin(d,k);
+    const nominal=c.sc>0?`<span class="st SC">${sd} entre ${c.sc} sin confirmar</span>`:(c.dep===sd?`<span class="st DEP">bastidores ${c.dep}/${sd}</span>`:`<span class="st SC">bastidores ${c.dep}/${sd}</span>`);
+    rows+=`<div class="lr"><div class="nm"><b>${esc(d.id)}</b> · ${esc(m.nombre)} ${d.bloqueado?'<span class="st BLK">problemático</span>':''}
+      <div>S/E ${esc(d.sEntrada||'—')} · ${esc(d.depositante)} · ${nominal}</div></div>
+      <div class="bar ${d.bloqueado?'blk':''}" title="${sd} de ${m.uds}"><i style="width:${(sd/m.uds*100).toFixed(1)}%"></i></div>
+      <div class="q">${sd}<small>de ${m.uds}</small></div></div>`;
+  }));
+  if(!rows) rows='<div class="empty">Sin vehículos en depósito.</div>';
+  return `<div class="box"><div class="dep"><div class="big">${n}<small>en depósito</small></div><div><h2>${esc(D.nombre)}</h2>
+    <div class="meta">${esc(D.id)} · ${esc(D.lugar)}<br>${esc(D.titular)}</div>
+    <div class="nx"><span>Últ. S/Salida <b>${D.ultSS[YEAR]||0}/${YEAR}</b></span><span>Siguiente <b class="amber">${nextSS(dep)}/${YEAR}</b></span><span>Últ. S/Entrada <b>${D.ultSE[YEAR]||0}/${YEAR}</b></span></div></div></div>${rows}</div>`;
+}
+function todasSalidas(){
+  const out=[];
+  S.dossiers.forEach(d=>d.salidas.forEach(s=>out.push({d,s,ss:ssNum(s.ss)})));
+  out.sort((a,b)=>{ const ay=a.ss?a.ss.y*1000+a.ss.n:0, by=b.ss?b.ss.y*1000+b.ss.n:0; if(by!==ay) return by-ay; return (b.s.fecha||'').localeCompare(a.s.fecha||''); });
+  return out;
+}
+function movBox(){
+  const L=todasSalidas().filter(x=>x.ss).slice(0,14);
+  return `<div class="box"><div class="bh"><h3>Últimas salidas</h3><span class="tiny muted">por S/Salida</span></div><div class="bb flush tw"><table><thead><tr><th>S/Salida</th><th>Depósito</th><th>Dossier ent.</th><th>Dossier sal.</th><th class="n">Uds</th><th>Fecha</th><th>Bastidores</th></tr></thead><tbody>
+  ${L.map(({d,s})=>`<tr data-cuadro="${esc(d.id)}" style="cursor:pointer"><td class="mono">${esc(s.ss)}</td><td>${esc(d.deposito)}</td><td class="mono">${esc(d.id)}</td><td class="mono">${esc(s.dossier||'—')}</td><td class="n mono">${udsTxt(s.uds,d)}</td><td class="mono">${esc(fdate(s.fecha)||'—')}</td><td>${s.vins.length?`<span class="st DEP">${s.vins.length} identificados</span>`:'<span class="st SC">sin documentar</span>'}</td></tr>`).join('')}
+  </tbody></table></div></div>`;
+}
+function udsTxt(u,d){ const ks=Object.keys(u).filter(k=>u[k]); if(ks.length===1&&Object.keys(d.modelos).length===1) return String(u[ks[0]]); return ks.map(k=>`${k} ${u[k]}`).join(' · '); }
+function avisosBox(){
+  return `<div class="box"><div class="bh"><h3>Avisos</h3><span class="tiny muted">${S.avisos.length}</span></div><div class="bb stack">${S.avisos.map(a=>`<div class="note ${a.nivel==='alerta'?'':'info'}">${esc(a.txt)}</div>`).join('')}</div></div>`;
+}
+
+/* =====================================================================
+   2 · STOCK
+   ===================================================================== */
+const FS={q:'',dep:'',dos:'',mod:'',est:'ACT'}; let SELV=new Set();
+function filtraVeh(){
+  const q=FS.q.trim().toUpperCase();
+  return S.vehiculos.filter(v=>{
+    if(FS.dep&&v.deposito!==FS.dep) return false;
+    if(FS.dos&&v.dossier!==FS.dos) return false;
+    if(FS.mod&&v.modelo!==FS.mod) return false;
+    if(FS.est==='ACT'&&!(v.estado==='DEP'||v.estado==='SC')) return false;
+    if(FS.est&&FS.est!=='ACT'&&v.estado!==FS.est) return false;
+    if(q&&!(v.vin.includes(q)||(v.color||'').includes(q))) return false;
+    return true;
+  });
+}
+function rStock(){
+  const el=$('#v-stock'); const L=filtraVeh();
+  const cnt={DEP:0,SC:0,DES:0,PUE:0}; L.forEach(v=>cnt[v.estado]=(cnt[v.estado]||0)+1);
+  const mods=[...new Set(S.vehiculos.map(v=>v.modelo))];
+  const q=FS.q.trim().toUpperCase();
+  const hist=q.length>=5?S.historicoVin.filter(h=>h[0].includes(q)).slice(0,60):[];
+  el.innerHTML=`<div class="vh"><div><h1>Stock por bastidor</h1><p>Cada vehículo con su estado aduanero. «Sin confirmar» son bastidores del 100263 cuya salida no está documentada: entre ellos están los ${saldo(dossier('100263'),'MOD-A')+saldo(dossier('100263'),'MOD-B')} que siguen en DEPB.</p></div>
+   <div class="row"><button class="btn" id="stCsv">CSV</button><button class="btn" id="stXlsx">Excel</button><button class="btn pri" id="stDesp" ${SELV.size?'':'disabled'}>Despachar selección (${SELV.size})</button></div></div>
+   <div class="box"><div class="bb"><div class="fr">
+     <label class="f">Bastidor o terminación<input type="search" id="fq" class="mono" value="${esc(FS.q)}" placeholder="10001 · ABCDEFGH…"></label>
+     <label class="f">Depósito<select id="fdep"><option value="">Todos</option>${['DEPA','DEPB'].map(x=>`<option ${FS.dep===x?'selected':''}>${x}</option>`).join('')}</select></label>
+     <label class="f">Dossier<select id="fdos"><option value="">Todos</option>${S.dossiers.map(d=>`<option value="${esc(d.id)}" ${FS.dos===d.id?'selected':''}>${esc(d.id)}</option>`).join('')}</select></label>
+     <label class="f">Modelo<select id="fmod"><option value="">Todos</option>${mods.map(m=>`<option ${FS.mod===m?'selected':''}>${esc(m)}</option>`).join('')}</select></label>
+     <label class="f">Estado<select id="fest">${[['ACT','En depósito + sin confirmar'],['DEP','En depósito'],['SC','Sin confirmar'],['DES','Despachados'],['PUE','Despachados en puerto'],['','Todos']].map(([v,l])=>`<option value="${v}" ${FS.est===v?'selected':''}>${l}</option>`).join('')}</select></label>
+   </div><div class="row" style="margin-top:10px">${Object.entries(cnt).filter(([k,c])=>c).map(([k,c])=>`<span class="st ${k}">${ESTADOS[k]} ${c}</span>`).join('')}<span class="sp"></span><span class="tiny muted">${L.length} vehículos</span></div></div>
+   <div class="scroll tw"><table><thead><tr><th></th><th>Bastidor</th><th>Modelo</th><th>Color</th><th>Depósito</th><th>Dossier</th><th>Estado</th><th>S/Salida</th><th>Dossier sal.</th><th>DUA</th><th>Fuente</th></tr></thead><tbody>
+   ${L.map(v=>{ const s=salidaDe(v); const can=(v.estado==='DEP'||v.estado==='SC');
+     return `<tr data-vin="${esc(v.vin)}" class="${SELV.has(v.vin)?'sel':''}"><td>${can?`<input type="checkbox" aria-label="Seleccionar ${esc(v.vin)}" data-chk="${esc(v.vin)}" ${SELV.has(v.vin)?'checked':''}>`:''}</td>
+     <td class="vin">${vinHtml(v.vin)}</td><td>${esc(v.marca)} ${esc(v.modelo)}</td><td>${esc(v.color||'—')}</td><td>${esc(v.deposito)}</td><td class="mono">${esc(v.dossier)}</td>
+     <td><span class="st ${v.estado}">${ESTADOS[v.estado]}</span>${v.nota?` <span class="flag" title="${esc(v.nota)}">⚑</span>`:''}</td>
+     <td class="mono">${esc(s?s.ss||'(s/n)':'')}</td><td class="mono">${esc(s?s.dossier:'')}</td><td class="mono tiny">${esc(s?s.dua:(v.duaAeat||''))}</td><td class="tiny muted">${esc(v.conf)}</td></tr>`;}).join('')||'<tr><td colspan="11" class="empty">Ningún vehículo con estos filtros.</td></tr>'}
+   </tbody></table></div></div>
+   ${hist.length?`<div class="box" style="margin-top:12px"><div class="bh"><h3>Histórico AEAT · DVD saldados de DEPA</h3><span class="tiny muted">${hist.length} coincidencias</span></div><div class="bb flush tw"><table><thead><tr><th>Bastidor</th><th>Marca</th><th>Modelo</th><th>DVD</th><th>DUA de datado</th></tr></thead><tbody>${hist.map(h=>`<tr><td class="vin">${vinHtml(h[0])}</td><td>${esc(h[2])}</td><td>${esc(h[3])}</td><td class="mono tiny">${esc(h[1])}</td><td class="mono tiny">${esc(h[4])}</td></tr>`).join('')}</tbody></table></div></div>`:''}`;
+  const bind=(id,k)=>{ const e=$('#'+id); e.addEventListener('input',()=>{ FS[k]=e.value; const pos=e.selectionStart; rStock(); const n=$('#'+id); n.focus(); if(n.setSelectionRange&&k==='q') n.setSelectionRange(pos,pos); }); };
+  bind('fq','q'); ['fdep:dep','fdos:dos','fmod:mod','fest:est'].forEach(p=>{const [i,k]=p.split(':'); $('#'+i).addEventListener('change',e=>{FS[k]=e.target.value; rStock();});});
+  $('#stCsv').onclick=()=>exportStockCsv(L); $('#stXlsx').onclick=()=>exportXlsx();
+  $('#stDesp').onclick=()=>{ DS.items=[]; [...SELV].forEach(vin=>addItemVin(vin,'selección')); SELV.clear(); go('despacho'); };
+}
+document.addEventListener('change',e=>{ const c=e.target.closest('[data-chk]'); if(!c) return; const v=c.dataset.chk; c.checked?SELV.add(v):SELV.delete(v); rStock(); });
+function vinDetail(vin){
+  const v=vehByVin(vin); if(!v) return;
+  const d=dossier(v.dossier), s=salidaDe(v);
+  modal('Bastidor '+vin,`<dl class="det">
+    <dt>Estado</dt><dd><span class="st ${v.estado}">${ESTADOS[v.estado]}</span></dd>
+    <dt>Vehículo</dt><dd>${esc(v.marca)} ${esc(v.modelo)} · ${esc(v.version||'')} · ${esc(v.color||'—')}${v.tapiceria?' · tapicería '+esc(v.tapiceria):''}</dd>
+    <dt>Depósito</dt><dd>${esc(S.depositos[v.deposito].nombre)} (${esc(S.depositos[v.deposito].id)})</dd>
+    <dt>Dossier entrada</dt><dd>${esc(d.id)} · S/E ${esc(d.sEntrada||'—')} · llegada ${esc(fdate(v.llegada))}</dd>
+    <dt>DVD</dt><dd>${esc(v.dvd||d.dvd)}</dd>
+    ${s?`<dt>Salida</dt><dd>S/S ${esc(s.ss||'(sin número)')} · dossier ${esc(s.dossier||'—')}${s.fecha?' · '+esc(fdate(s.fecha)):''}</dd><dt>DUA</dt><dd>${esc(s.dua||'—')}</dd>`:''}
+    ${v.estado==='PUE'&&d.puerto?`<dt>Puerto</dt><dd>Despachado en puerto${d.puerto.dossier?' · dossier '+esc(d.puerto.dossier):''}${d.puerto.dua?' · DUA '+esc(d.puerto.dua):''}</dd>`:''}
+    <dt>Fuente</dt><dd>${esc(v.conf)}</dd>${v.nota?`<dt>Nota</dt><dd>${esc(v.nota)}</dd>`:''}</dl>`);
+}
+document.addEventListener('click',e=>{
+  const g=e.target.closest('[data-go]'); if(g){ go(g.dataset.go); return; }
+  const cu=e.target.closest('[data-cuadro]'); if(cu&&!e.target.closest('button')){ CS.sel=cu.dataset.cuadro; go('cuadros'); return; }
+  const tr=e.target.closest('tr[data-vin]'); if(tr&&!e.target.closest('input')){ vinDetail(tr.dataset.vin); }
+});
+$('#nav').addEventListener('click',e=>{ const b=e.target.closest('button[data-v]'); if(b) go(b.dataset.v); });
+
+function exportStockCsv(L){
+  const H=['Bastidor','Marca','Modelo','Version','Color','Deposito','Dossier entrada','S/Entrada','DVD','Estado','S/Salida','Dossier salida','DUA salida','Fecha salida','Fuente'];
+  const rows=L.map(v=>{ const d=dossier(v.dossier), s=salidaDe(v); return [v.vin,v.marca,v.modelo,v.version,v.color,v.deposito,v.dossier,d.sEntrada,v.dvd||d.dvd,ESTADOS[v.estado],s?s.ss:'',s?s.dossier:'',s?s.dua:'',s?fdate(s.fecha):'',v.conf]; });
+  const csv='﻿'+[H,...rows].map(r=>r.map(x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  saveFile('stock_almacen_'+hoy()+'.csv',csv);
+}
+
+/* =====================================================================
+   3 · CUADROS DE SALDO
+   ===================================================================== */
+const CS={sel:null,open:{}};
+function ledger(d){ // filas del cuadro, recalculadas
+  const ks=Object.keys(d.modelos); const rows=[];
+  let bal={}; ks.forEach(k=>bal[k]=d.modelos[k].uds);
+  const totVals=u=>ks.reduce((a,k)=>sumVals(a,vals(d.modelos[k],u[k]||0)),{});
+  if(d.puerto){ rows.push({tipo:'puerto',lab:'DESPACHO PUERTO',ss:'',dossier:d.puerto.dossier,dua:d.puerto.dua,uds:d.puerto.uds,v:totVals(d.puerto.uds),bal:null}); }
+  const ent={}; ks.forEach(k=>ent[k]=d.modelos[k].uds);
+  rows.push({tipo:'ent',lab:'S/ENTRADA '+(d.sEntrada||''),ss:'',dossier:d.id,dua:d.dvd,uds:ent,v:totVals(ent),bal:{...bal},bv:totVals(bal)});
+  d.salidas.forEach(s=>{ ks.forEach(k=>bal[k]-=(s.uds[k]||0)); rows.push({tipo:'sal',s,lab:'SALIDA '+s.n,ss:s.ss,dossier:s.dossier,dua:s.dua,fecha:s.fecha,uds:s.uds,v:totVals(s.uds),bal:{...bal},bv:totVals(bal)}); });
+  rows.push({tipo:'fin',lab:'EN DEPÓSITO',uds:{...bal},v:totVals(bal),bal:{...bal},bv:totVals(bal)});
+  return rows;
+}
+function rCuadros(){
+  const el=$('#v-cuadros');
+  const open=S.dossiers.filter(abierto), closed=S.dossiers.filter(d=>!abierto(d));
+  if(!CS.sel||!dossier(CS.sel)) CS.sel=(open[0]||S.dossiers[0]).id;
+  const d=dossier(CS.sel); const ks=Object.keys(d.modelos); const multi=ks.length>1;
+  const mI=monOf(d,'imp'), mT=monOf(d,'tte'), mS=monOf(d,'seg');
+  const L=ledger(d);
+  el.innerHTML=`<div class="vh"><div><h1>Cuadros de saldo</h1><p>Réplica de cada Excel: arriba la entrada, cada salida resta unidades × valor unitario, a la derecha el saldo. Los importes se recalculan, así que corrigen los valores tecleados a mano en el original.</p></div>
+   <div class="row"><button class="btn" id="cuXlsx">Exportar cuadro (Excel)</button><button class="btn" id="cuTsv">Copiar cuadro (TSV)</button></div></div>
+   <div class="row" style="margin-bottom:12px">${open.map(x=>`<button class="btn sm ${x.id===d.id?'pri':''}" data-sel="${esc(x.id)}">${esc(x.id)} · ${saldoDossier(x)}</button>`).join('')}${closed.length?'<span class="tiny muted">Saldados:</span>':''}${closed.map(x=>`<button class="btn sm ${x.id===d.id?'pri':''}" data-sel="${esc(x.id)}">${esc(x.id)}</button>`).join('')}</div>
+   <div class="grid g2">
+    <div class="box"><div class="bh"><h3>${esc(d.id)} · ${esc(d.titulo)}</h3>${d.bloqueado?'<span class="st BLK">problemático</span>':abierto(d)?'<span class="st DEP">abierto</span>':'<span class="st DES">saldado</span>'}</div><div class="bb"><dl class="det">
+      <dt>Depósito</dt><dd>${esc(S.depositos[d.deposito].nombre)} · ${esc(S.depositos[d.deposito].id)}</dd>
+      <dt>Depositante</dt><dd>${esc(d.depositante)}</dd><dt>DVD</dt><dd>${esc(d.dvd||'—')}</dd>
+      <dt>S/Entrada</dt><dd>${esc(d.sEntrada||'—')} · llegada ${esc(fdate(d.llegada))}</dd>
+      <dt>Divisa factura</dt><dd>${esc(d.divisa)}</dd><dt>Excel</dt><dd>${esc(d.archivo||'—')}</dd></dl>
+      ${d.notas&&d.notas.length?`<div class="stack" style="margin-top:10px">${d.notas.map(n=>`<div class="note">${esc(n)}</div>`).join('')}</div>`:''}</div></div>
+    <div class="box"><div class="bh"><h3>Valor unitario</h3><span class="tiny muted">por vehículo</span></div><div class="bb flush tw"><table><thead><tr><th>Modelo</th><th class="n">PB kg</th><th class="n">PN kg</th><th class="n">Importe</th><th class="n">Flete</th><th class="n">Seguro</th><th class="n">THC €</th><th class="n">T-3 €</th><th class="n">Plást. kg</th><th>Partida</th></tr></thead><tbody>
+     ${ks.map(k=>{const m=d.modelos[k];return `<tr><td>${esc(m.nombre)}</td><td class="n mono">${fkg(m.pb)}</td><td class="n mono">${fkg(m.pn)}</td><td class="n mono">${f2(m.imp)} ${MON_LBL[m.mon.imp]}</td><td class="n mono">${f2(m.tte)} ${MON_LBL[m.mon.tte]}</td><td class="n mono">${f2(m.seg)} ${MON_LBL[m.mon.seg]}</td><td class="n mono">${f2(m.thc)}</td><td class="n mono">${f2(m.t3)}</td><td class="n mono">${fkg(m.plast)}</td><td class="mono">${esc(m.partida||'—')}</td></tr>`;}).join('')}
+     </tbody></table></div></div>
+   </div>
+   <div class="box" style="margin-top:12px"><div class="bh"><h3>Movimientos y saldo</h3><span class="tiny muted">${d.salidas.length} salidas · importe en ${esc(mI)} · flete ${esc(mT)} · seguro ${esc(mS)}</span></div>
+   <div class="bb flush tw"><table><thead><tr><th>Movimiento</th><th>S/Salida</th><th>Dossier</th><th>DUA / MRN</th><th>Fecha</th><th class="n">Uds</th><th class="n">PB</th><th class="n">Importe</th><th class="n">Flete</th><th class="n">Seguro</th><th class="n">THC €</th><th class="n">T-3 €</th><th class="n">Plást.</th><th class="n" style="border-left:1px solid var(--line2)">Saldo uds</th><th class="n">Saldo PB</th><th class="n">Saldo importe</th><th class="n">Saldo flete</th><th class="n">Saldo seguro</th><th class="n">Saldo THC</th><th class="n">Saldo T-3</th><th>Bastidores</th></tr></thead><tbody>
+   ${L.map((r,i)=>{
+     const cls=r.tipo==='ent'?'ent':r.tipo==='fin'?'fin':r.tipo==='puerto'?'sub':'';
+     const balTxt=r.bal?(multi?ks.map(k=>`${k} ${r.bal[k]}`).join(' · '):String(r.bal[ks[0]])):'—';
+     const notas=r.s&&r.s.notas&&r.s.notas.length?`<details class="nt"><summary>⚑ ${r.s.notas.length===1?'nota':r.s.notas.length+' notas'}</summary>${r.s.notas.map(n=>`<p>${esc(n)}</p>`).join('')}</details>`:'';
+     const vinsCell=r.tipo==='sal'?(r.s.vins.length?`<button class="btn sm" data-vins="${i}">${r.s.vins.length} ver</button>`:'<span class="st SC">sin documentar</span>'):(r.tipo==='puerto'?`<span class="st PUE">${vehDe(d.id).filter(v=>v.estado==='PUE').length} en puerto</span>`:'');
+     const vv=r.v;
+     const main=r.tipo==='fin'?`<td></td><td></td><td></td><td></td>`:`<td class="mono">${esc(r.ss||'')}</td><td class="mono">${esc(r.dossier||'')}</td><td class="mono tiny">${esc(r.dua||'')}</td><td class="mono tiny">${esc(fdate(r.fecha)||'')}</td>`;
+     const valsCells=r.tipo==='fin'?'<td colspan="8"></td>':`<td class="n mono">${multi?Object.keys(r.uds).filter(k=>r.uds[k]).map(k=>`${k} ${r.uds[k]}`).join(' · '):vv.uds}</td><td class="n mono">${fkg(vv.pb)}</td><td class="n mono">${f2(vv.imp)}</td><td class="n mono">${f2(vv.tte)}</td><td class="n mono">${f2(vv.seg)}</td><td class="n mono">${f2(vv.thc)}</td><td class="n mono">${f2(vv.t3)}</td><td class="n mono">${fkg(vv.plast)}</td>`;
+     const balCells=r.bv?`<td class="n mono" style="border-left:1px solid var(--line2)"><b>${balTxt}</b></td><td class="n mono">${fkg(r.bv.pb)}</td><td class="n mono">${f2(r.bv.imp)}</td><td class="n mono">${f2(r.bv.tte)}</td><td class="n mono">${f2(r.bv.seg)}</td><td class="n mono">${f2(r.bv.thc)}</td><td class="n mono">${f2(r.bv.t3)}</td>`:`<td style="border-left:1px solid var(--line2)" colspan="7" class="tiny muted">no entra en depósito</td>`;
+     let html=`<tr class="${cls}"><td>${esc(r.lab)}${notas}</td>${main}${valsCells}${balCells}<td>${vinsCell}</td></tr>`;
+     if(r.tipo==='sal'&&CS.open[d.id+':'+i]) html+=`<tr class="sub"><td colspan="21" class="mono">${r.s.vins.map(v=>{const x=vehByVin(v);return esc(v)+(x?' · '+esc(x.modelo)+' '+esc(x.color||''):'');}).join('<br>')}<div class="tiny" style="margin-top:4px">Fuente: ${esc(r.s.fuente||'')}</div></td></tr>`;
+     return html; }).join('')}
+   </tbody></table></div></div>`;
+  $$('[data-sel]',el).forEach(b=>b.onclick=()=>{CS.sel=b.dataset.sel; rCuadros();});
+  $$('[data-vins]',el).forEach(b=>b.onclick=()=>{ const k=d.id+':'+b.dataset.vins; CS.open[k]=!CS.open[k]; rCuadros(); });
+  $('#cuTsv').onclick=()=>copyText(cuadroTsv(d));
+  $('#cuXlsx').onclick=()=>exportCuadroXlsx(d);
+}
+function cuadroAoA(d){
+  const ks=Object.keys(d.modelos); const L=ledger(d);
+  const H=['MOVIMIENTO','S/SALIDA','DOSSIER','DUA / MRN','FECHA','MODELO','UDS','PB','PN','IMPORTE '+monOf(d,'imp'),'TTE '+monOf(d,'tte'),'SEGURO '+monOf(d,'seg'),'THC €','T-3 €','PLASTICO kg','','SALDO UDS','SALDO PB','SALDO PN','SALDO IMPORTE','SALDO TTE','SALDO SEGURO','SALDO THC','SALDO T-3','SALDO PLASTICO'];
+  const out=[[`${d.id} · ${d.titulo} · ${S.depositos[d.deposito].nombre} · DVD ${d.dvd||''} · S/E ${d.sEntrada||''}`],[],H];
+  L.forEach(r=>{
+    ks.forEach((k,j)=>{
+      const n=(r.uds&&r.uds[k])||0; if(r.tipo==='sal'&&!n&&ks.length>1) return;
+      const v=vals(d.modelos[k],n); const b=r.bal?vals(d.modelos[k],r.bal[k]):null;
+      out.push([j===0||ks.length===1?r.lab:'', j===0?(r.ss||''):'', j===0?(r.dossier||''):'', j===0?(r.dua||''):'', j===0?fdate(r.fecha):'', d.modelos[k].nombre, n, r2(v.pb), r2(v.pn), r2(v.imp), r2(v.tte), r2(v.seg), r2(v.thc), r2(v.t3), r2(v.plast), '',
+        b?b.uds:'', b?r2(b.pb):'', b?r2(b.pn):'', b?r2(b.imp):'', b?r2(b.tte):'', b?r2(b.seg):'', b?r2(b.thc):'', b?r2(b.t3):'', b?r2(b.plast):'']);
+    });
+  });
+  return out;
+}
+function cuadroTsv(d){ return cuadroAoA(d).map(r=>r.map(x=>typeof x==='number'?tsvn(x):String(x==null?'':x)).join('\t')).join('\n'); }
+async function exportCuadroXlsx(d){
+  try{ const X=await loadXLSX(); const wb=X.utils.book_new(); X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(cuadroAoA(d)),('Cuadro '+d.id).slice(0,31));
+    const buf=X.write(wb,{bookType:'xlsx',type:'array'}); await saveFile('cuadro_'+d.id+'_'+hoy()+'.xlsx',new Blob([buf])); }catch(e){ toast(e.message,'bad'); }
+}
+async function exportXlsx(){
+  try{ const X=await loadXLSX(); const wb=X.utils.book_new();
+    const H=['Bastidor','Marca','Modelo','Color','Depósito','Dossier','S/Entrada','DVD','Estado','S/Salida','Dossier salida','DUA','Fecha salida','Fuente'];
+    const rows=S.vehiculos.map(v=>{const d=dossier(v.dossier),s=salidaDe(v);return [v.vin,v.marca,v.modelo,v.color,v.deposito,v.dossier,d.sEntrada,v.dvd||d.dvd,ESTADOS[v.estado],s?s.ss:'',s?s.dossier:'',s?s.dua:'',s?fdate(s.fecha):'',v.conf];});
+    X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet([H,...rows]),'Stock');
+    const res=[['Depósito','Dossier','Modelo','Entrada','Salidas','Saldo']]; S.dossiers.forEach(d=>Object.keys(d.modelos).forEach(k=>res.push([d.deposito,d.id,d.modelos[k].nombre,d.modelos[k].uds,salidasUds(d,k),saldo(d,k)])));
+    X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(res),'Saldos');
+    S.dossiers.forEach(d=>X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(cuadroAoA(d)),('Cuadro '+d.id).slice(0,31)));
+    const buf=X.write(wb,{bookType:'xlsx',type:'array'}); await saveFile('control_depositos_'+hoy()+'.xlsx',new Blob([buf])); }catch(e){ toast(e.message,'bad'); }
+}
+
+/* =====================================================================
+   4 · DESPACHO DESDE DEPÓSITO (régimen 40 71)
+   ===================================================================== */
+const DS={items:[],errs:[],txt:'',grp:{},tab:'cuadro',done:null};
+function addItemVin(vin,via){
+  const v=vehByVin(vin);
+  if(DS.items.some(i=>i.vin===vin)) return {ok:false,msg:`${vin}: repetido en la solicitud.`};
+  if(!v){ const h=S.historicoVin.find(x=>x[0]===vin); return {ok:false,msg:h?`${vin}: ya datado (DVD saldado ${h[1]}, DUA ${h[4]}).`:`${vin}: no figura en ningún depósito.`}; }
+  if(v.estado==='DES'){ const s=salidaDe(v); return {ok:false,msg:`${vin}: ya despachado${s?` en S/S ${s.ss||'(s/n)'} · dossier ${s.dossier||'—'}`:''}.`}; }
+  if(v.estado==='PUE') return {ok:false,msg:`${vin}: se despachó en puerto, nunca entró en depósito.`};
+  const d=dossier(v.dossier);
+  const yaN=DS.items.filter(i=>i.dossier===d.id&&i.modelo===v.modelo).length;
+  if(yaN+1>saldo(d,v.modelo)) return {ok:false,msg:`${vin}: el saldo de ${d.id} ${v.modelo} es ${saldo(d,v.modelo)} y ya hay ${yaN} seleccionados.`};
+  DS.items.push({vin,dossier:d.id,modelo:v.modelo,via});
+  return {ok:true};
+}
+function parseSolicitud(txt){
+  const up=txt.toUpperCase(); const found=[...new Set(up.match(VINRX)||[])];
+  const errs=[]; let added=0;
+  found.forEach(vin=>{ if(!vinCheck(vin)&&!vehByVin(vin)){ errs.push(`${vin}: dígito de control incorrecto; revisa si está bien copiado.`); return; } const r=addItemVin(vin,'bastidor'); r.ok?added++:errs.push(r.msg); });
+  // terminaciones sueltas (5–8 caracteres) que identifiquen un único vehículo activo
+  const rest=up.replace(VINRX,' ');
+  const toks=[...new Set((rest.match(/\b[A-HJ-NPR-Z0-9]{5,8}\b/g)||[]).filter(t=>/\d{4}/.test(t)))];
+  toks.forEach(t=>{ const c=S.vehiculos.filter(v=>(v.estado==='DEP'||v.estado==='SC')&&v.vin.endsWith(t));
+    if(c.length===1){ const r=addItemVin(c[0].vin,'terminación '+t); r.ok?added++:errs.push(r.msg); }
+    else if(c.length>1) errs.push(`Terminación ${t}: coincide con ${c.length} vehículos; usa el bastidor completo.`); });
+  if(!found.length&&!toks.length) errs.push('No he encontrado bastidores en el texto.');
+  return {added,errs};
+}
+function grupos(){ // un grupo por dossier de entrada (una S/Salida por DVD, como en los cuadros)
+  const g={}; DS.items.forEach(i=>{ (g[i.dossier]=g[i.dossier]||[]).push(i); });
+  const ids=Object.keys(g).sort((a,b)=>{const da=dossier(a),db=dossier(b);return da.deposito.localeCompare(db.deposito)||a.localeCompare(b);});
+  Object.keys(DS.grp).forEach(id=>{ if(!g[id]) delete DS.grp[id]; });
+  ids.forEach(id=>{ if(DS.grp[id]) return; const dep=dossier(id).deposito;
+    let top=nextSS(dep)-1;
+    Object.keys(DS.grp).forEach(o=>{ if(dossier(o).deposito!==dep) return; const s=ssNum(DS.grp[o].ss); if(s&&s.y===YEAR) top=Math.max(top,s.n); });
+    DS.grp[id]={ss:(top+1)+'/'+YEAR,dossier:'',fecha:hoy(),dua:'',prov:''};
+  });
+  return ids.map(id=>({d:dossier(id),items:g[id],f:DS.grp[id]}));
+}
+function grupoVals(G){ const d=G.d; const u={}; G.items.forEach(i=>u[i.modelo]=(u[i.modelo]||0)+1);
+  const per=Object.keys(u).map(k=>({k,m:d.modelos[k],n:u[k],v:vals(d.modelos[k],u[k]),antes:saldo(d,k),despues:saldo(d,k)-u[k]}));
+  return {u,per,tot:per.reduce((a,p)=>sumVals(a,p.v),{})}; }
+function rDespacho(){
+  const el=$('#v-despacho'); const G=grupos();
+  const pick=[]; S.dossiers.forEach(d=>Object.keys(d.modelos).forEach(k=>{ const c=confVin(d,k); if(c.sc>0&&saldo(d,k)>0) pick.push({d,k,c}); }));
+  el.innerHTML=`<div class="vh"><div><h1>Despacho a consumo desde depósito</h1><p>Pega la solicitud de CLIENTE tal como llega (tabla del correo, lista o terminaciones). La app localiza depósito y dossier, comprueba el saldo y prepara el bloque del cuadro, el desglose para el DUA 40 71 y los correos.</p></div>
+   <div class="row"><button class="btn" id="dsClear" ${DS.items.length?'':'disabled'}>Vaciar</button></div></div>
+   <div class="grid g2">
+    <div class="box"><div class="bh"><h3>1 · Vehículos</h3></div><div class="bb stack">
+      <textarea id="dsTxt" placeholder="Solicito despacho de 2 vehículos MARCAUNO que se encuentran en el depósito de DEPA.&#10;YG01HJ8VY1MXBXP6H  MOD-C  INTELLIGENT  VERDE  ene.-26&#10;…o solo terminaciones: 10002 10003">${esc(DS.txt)}</textarea>
+      <div class="row"><button class="btn pri" id="dsParse">Localizar bastidores</button><span class="tiny muted">También puedes marcar vehículos en Stock y pulsar «Despachar selección».</span></div>
+      ${DS.errs.length?`<div class="note bad">${DS.errs.map(esc).join('<br>')}</div>`:''}
+      ${pick.length?`<div class="lab" style="margin-top:4px">Por cantidad · dossiers sin bastidor confirmado</div>
+       <div class="tw"><table><thead><tr><th>Dossier</th><th>Modelo</th><th class="n">Saldo</th><th class="n">Seleccionar</th></tr></thead><tbody>
+       ${pick.map(p=>{ const n=DS.items.filter(i=>i.dossier===p.d.id&&i.modelo===p.k&&!i.vin).length; return `<tr><td class="mono">${esc(p.d.id)}</td><td>${esc(p.d.modelos[p.k].nombre)}</td><td class="n mono">${saldo(p.d,p.k)}</td><td class="n"><span class="qty"><button data-q="-1" data-d="${esc(p.d.id)}" data-k="${esc(p.k)}" aria-label="Quitar">−</button><span>${n}</span><button data-q="1" data-d="${esc(p.d.id)}" data-k="${esc(p.k)}" aria-label="Añadir">+</button></span></td></tr>`;}).join('')}
+       </tbody></table></div><div class="tiny muted">Úsalo solo si la solicitud no trae bastidores. Si los trae, pégalos: así el bastidor queda confirmado como despachado.</div>`:''}
+    </div></div>
+    <div class="box"><div class="bh"><h3>Selección</h3><span class="tiny muted">${DS.items.length} vehículos</span></div><div class="bb flush tw">
+      ${DS.items.length?`<table><thead><tr><th>Bastidor</th><th>Modelo</th><th>Color</th><th>Depósito</th><th>Dossier</th><th>Estado</th><th></th></tr></thead><tbody>
+      ${DS.items.map((it,ix)=>{ const v=it.vin?vehByVin(it.vin):null; return `<tr><td class="vin">${v?vinHtml(v.vin):'<span class="muted">sin bastidor</span>'}</td><td>${esc(dossier(it.dossier).modelos[it.modelo].nombre)}</td><td>${esc(v?v.color:'')}</td><td>${esc(dossier(it.dossier).deposito)}</td><td class="mono">${esc(it.dossier)}</td><td>${v?`<span class="st ${v.estado}">${ESTADOS[v.estado]}</span>`:'<span class="st SC">por cantidad</span>'}</td><td><button class="btn sm" data-rm="${ix}" aria-label="Quitar">✕</button></td></tr>`;}).join('')}
+      </tbody></table>`:'<div class="empty">Aún no hay vehículos. Pega la solicitud a la izquierda.</div>'}
+    </div></div>
+   </div>
+   ${G.length?`<div class="box" style="margin-top:12px"><div class="bh"><h3>2 · Datos de cada salida</h3><span class="tiny muted">una S/Salida por DVD, como en los cuadros · confirma el número en el libro del depósito</span></div><div class="bb stack">
+     ${G.map(g=>{ const gv=grupoVals(g); return `<div class="box" style="background:var(--panel2)"><div class="bh"><h3>${esc(g.d.deposito)} · ${esc(g.d.id)} · S/E ${esc(g.d.sEntrada||'—')}</h3><span class="tiny mono">${gv.per.map(p=>`${esc(p.m.nombre)}: ${p.antes} → ${p.despues}`).join(' · ')}</span></div><div class="bb"><div class="fr">
+       <label class="f">S/Salida<input type="text" class="mono" data-g="${esc(g.d.id)}" data-f="ss" value="${esc(g.f.ss)}"></label>
+       <label class="f">Dossier de salida<input type="text" class="mono" data-g="${esc(g.d.id)}" data-f="dossier" value="${esc(g.f.dossier)}" placeholder="245xxx"></label>
+       <label class="f">Fecha<input type="date" data-g="${esc(g.d.id)}" data-f="fecha" value="${esc(g.f.fecha)}"></label>
+       <label class="f">DUA / MRN (si ya existe)<input type="text" class="mono" data-g="${esc(g.d.id)}" data-f="dua" value="${esc(g.f.dua)}" placeholder="99DEMOZXHCS…"></label>
+       <label class="f">Provisión de fondos<input type="text" data-g="${esc(g.d.id)}" data-f="prov" value="${esc(g.f.prov)}" placeholder="texto libre"></label>
+     </div></div></div>`;}).join('')}
+     </div></div>
+   <div class="box" style="margin-top:12px"><div class="bh"><h3>3 · Documentos</h3><div class="row"><button class="btn" id="dsCopy">Copiar</button><button class="btn pri" id="dsReg" ${READONLY?'disabled':''}>Registrar despacho</button></div></div>
+     <div class="bb stack"><div class="tabs" role="tablist">${[['cuadro','Bloque del cuadro'],['dua','DUA 40 71'],['cliente','Correo a CLIENTE'],['deposito','Aviso al depósito'],['docs','Documentación']].map(([k,l])=>`<button role="tab" aria-selected="${DS.tab===k}" data-tab="${k}">${l}</button>`).join('')}</div>
+     <pre class="out" id="dsOut">${esc(docDespacho(G,DS.tab))}</pre>
+     ${DS.tab==='cuadro'?'<div class="tiny muted">Formato tabulado: pégalo directamente en el Excel del dossier, debajo de la última salida. Números sin separador de miles y con coma decimal.</div>':''}</div></div>`:''}
+   ${DS.done?`<div class="note ok" style="margin-top:12px">${DS.done}</div>`:''}`;
+  $('#dsTxt').addEventListener('input',e=>DS.txt=e.target.value);
+  $('#dsParse').onclick=()=>{ DS.done=null; const r=parseSolicitud(DS.txt); DS.errs=r.errs; if(r.added) toast(`${r.added} vehículo(s) añadidos`,'ok'); rDespacho(); };
+  $('#dsClear').onclick=()=>{ DS.items=[]; DS.errs=[]; DS.grp={}; DS.txt=''; DS.done=null; rDespacho(); };
+  $$('[data-rm]',el).forEach(b=>b.onclick=()=>{ DS.items.splice(+b.dataset.rm,1); rDespacho(); });
+  $$('[data-q]',el).forEach(b=>b.onclick=()=>{ const d=dossier(b.dataset.d),k=b.dataset.k,q=+b.dataset.q;
+    if(q>0){ const n=DS.items.filter(i=>i.dossier===d.id&&i.modelo===k).length; if(n>=saldo(d,k)){ toast('No hay más saldo de '+k,'bad'); return; } DS.items.push({vin:null,dossier:d.id,modelo:k,via:'cantidad'}); }
+    else { const ix=DS.items.map((i,j)=>[i,j]).reverse().find(([i])=>i.dossier===d.id&&i.modelo===k&&!i.vin); if(ix) DS.items.splice(ix[1],1); }
+    rDespacho(); });
+  $$('[data-g]',el).forEach(inp=>inp.addEventListener('input',()=>{ DS.grp[inp.dataset.g][inp.dataset.f]=inp.value; const o=$('#dsOut'); if(o) o.textContent=docDespacho(grupos(),DS.tab); }));
+  $$('[data-tab]',el).forEach(b=>b.onclick=()=>{ DS.tab=b.dataset.tab; rDespacho(); });
+  const cp=$('#dsCopy'); if(cp) cp.onclick=()=>copyText(docDespacho(grupos(),DS.tab));
+  const rg=$('#dsReg'); if(rg) rg.onclick=registrarDespacho;
+}
+function docDespacho(G,tab){
+  if(!G.length) return '';
+  if(tab==='cuadro') return G.map(g=>bloqueCuadro(g)).join('\n\n');
+  if(tab==='dua') return G.map(g=>textoDUA(g)).join('\n\n────────────────────────────────────────\n\n');
+  if(tab==='cliente') return correoCliente(G);
+  if(tab==='deposito') return G.map(g=>avisoDeposito(g)).join('\n\n────────────────────────────────────────\n\n');
+  if(tab==='docs') return G.map(g=>{ const dos=g.f.dossier||'(dossier)'; return `${g.d.deposito} · S/S ${g.f.ss} · dossier ${dos}\n  [ ] ${dos} E-S.pdf (dossier completo)\n  [ ] I_${dos}_AEAT_CI.pdf\n  [ ] I_${dos}_DUA_8.pdf\n  [ ] I_${dos}_C10.pdf  (hoja de diligencias · habilitación de factura parcial)\n  [ ] I_${dos}_AEAT_M031.pdf  (carta de pago)\n  [ ] I_${dos}_AEAT_LEV.pdf  (levante)\n  [ ] Actualizar el Excel del dossier ${g.d.id} con el bloque del cuadro`; }).join('\n\n');
+  return '';
+}
+function bloqueCuadro(g){
+  const d=g.d, ks=Object.keys(d.modelos), gv=grupoVals(g); const n=d.salidas.length+1;
+  const mI=monOf(d,'imp'), mT=monOf(d,'tte'), mS=monOf(d,'seg');
+  const head=['UDS','PB','PN','IMPORTE '+mI,'TTE '+mT,'SEGURO '+mS,'THC €','T3 €','PLASTICO'];
+  const line=v=>[v.uds,v.pb,v.pn,v.imp,v.tte,v.seg,v.thc,v.t3,v.plast].map(tsvn).join('\t');
+  const saldoV=k=>vals(d.modelos[k],saldo(d,k)-(gv.u[k]||0));
+  if(ks.length===1){ const k=ks[0];
+    return `${d.id}  ·  añadir tras la última salida\nS/SALIDA: ${g.f.ss}\t${head.join('\t')}\t\t${head.join('\t')}\nDOSSIER: ${g.f.dossier}\t${line(gv.tot)}\t\t${line(saldoV(k))}\nTOTAL\t${line(gv.tot)}`; }
+  const rows=ks.map((k,j)=>{ const v=vals(d.modelos[k],gv.u[k]||0); const lab=j===0?`SALIDA: ${n}`:(j===1?`DOSSIER: ${g.f.dossier}`:''); return `${lab}\t${d.modelos[k].nombre}\t${line(v)}\t\t${line(saldoV(k))}`; });
+  return `${d.id}  ·  añadir tras la última salida\n\t\t${head.join('\t')}\t\t${head.join('\t')}\n${rows.join('\n')}\nS/SALIDA: ${g.f.ss}\t\t${line(gv.tot)}`;
+}
+function textoDUA(g){
+  const d=g.d, D=S.depositos[d.deposito], gv=grupoVals(g);
+  const L=[`DESPACHO A CONSUMO DESDE DEPÓSITO · RÉGIMEN 40 71`,
+   `Depósito: ${D.nombre} (${D.id})`,
+   `S/ENTRADA: ${d.sEntrada||'—'} · S/SALIDA: ${g.f.ss} · Dossier: ${g.f.dossier||'(pendiente)'} · Fecha: ${fdate(g.f.fecha)}`,
+   `Documento precedente: DVD ${d.dvd||'—'} (1205)`,
+   `Depositante: ${d.depositante}`, ''];
+  gv.per.forEach(p=>{ const m=p.m, v=p.v; const vins=g.items.filter(i=>i.modelo===p.k);
+    L.push(`Partida ${m.partida||'(confirmar)'} · ${m.nombre} · ${p.n} ud${p.n>1?'s':''}`);
+    L.push(`  Peso bruto ${fkg(v.pb)} kg · Peso neto ${fkg(v.pn)} kg`);
+    L.push(`  Importe factura ${f2(v.imp)} ${m.mon.imp}`);
+    L.push(`  Flete ${f2(v.tte)} ${m.mon.tte} · Seguro ${f2(v.seg)} ${m.mon.seg}  → ajuste del valor en aduana según el incoterm de la factura`);
+    L.push(`  THC ${f2(v.thc)} € · T-3 ${f2(v.t3)} €  → solo base del IVA`);
+    if(v.plast) L.push(`  Plástico ${fkg(v.plast)} kg (impuesto envases, 0,45 €/kg)`);
+    L.push(`  Bastidores: ${vins.map(i=>i.vin||'(sin identificar)').join(', ')}`); L.push(''); });
+  L.push(`Casilla 44: N380 factura · N705 BL · 1205 DVD${d.marca==='MARCATRES'?' · revisar derecho compensatorio (consulta AEAT 20/03/2025)':''}`);
+  L.push(`Sin conversión de divisa: el tipo de cambio lo aplica el DUA. ${g.f.prov?'Provisión de fondos: '+g.f.prov:''}`);
+  return L.join('\n');
+}
+function correoCliente(G){
+  const marcas=[...new Set(G.map(g=>g.d.marca))].join(' / '); const n=G.reduce((a,g)=>a+g.items.length,0);
+  return `Asunto: RE: DESPACHO ${n} VEHICULO${n>1?'S':''} ${marcas}\n\nBuenos días,\n\n`+G.map(g=>`S/ENTRADA: ${g.d.sEntrada||'—'}\nS/SALIDA: ${g.f.ss}\nDUA: ${g.f.dua||'(pendiente de levante)'}`).join('\n\n')+`\n\nAdjuntamos documentación de despacho y levante.\n\nUn saludo`;
+}
+function avisoDeposito(g){
+  const d=g.d, D=S.depositos[d.deposito];
+  const filas=g.items.map(i=>{ const v=i.vin?vehByVin(i.vin):null; return `${(i.vin||'(sin identificar)').padEnd(19)}${(d.modelos[i.modelo].alias?d.modelos[i.modelo].alias[0]:i.modelo).padEnd(8)}${v?v.color:''}`; });
+  const lugar=d.deposito==='DEPB'?'DEPOSITO CIUDAD B':'DEPOSITO DEPA';
+  return `Para: ${D.contacto}\nAsunto: ${lugar} S/ENTRADA ${d.sEntrada||'—'} S/SALIDA ${g.f.ss} DOSSIER ${g.f.dossier||'(pendiente)'}\n\nBuenos días,\n\nOs confirmamos el despacho a consumo de ${g.items.length} vehículo${g.items.length>1?'s':''} del dossier ${d.id}. Ya pueden expedirse:\n\nBASTIDOR           MODELO  COLOR\n${filas.join('\n')}\n\nUn saludo`;
+}
+function registrarDespacho(){
+  const G=grupos(); if(!G.length){ toast('No hay vehículos seleccionados.','bad'); return; }
+  const faltan=G.filter(g=>!ssNum(g.f.ss)); if(faltan.length){ toast('Indica la S/Salida con formato n/año (p. ej. 48/'+YEAR+').','bad'); return; }
+  const clave=g=>{const s=ssNum(g.f.ss);return g.d.deposito+':'+s.n+'/'+s.y;};
+  const rep=G.find((g,i)=>G.findIndex(h=>clave(h)===clave(g))!==i);
+  if(rep){ toast(`La S/Salida ${rep.f.ss} está repetida en este despacho para ${rep.d.deposito}: cada DVD lleva la suya.`,'bad'); return; }
+  const dup=G.find(g=>{ const s=ssNum(g.f.ss); return S.dossiers.some(d=>d.deposito===g.d.deposito&&d.salidas.some(x=>{const y=ssNum(x.ss);return y&&y.n===s.n&&y.y===s.y;})); });
+  const res=G.map(g=>{const gv=grupoVals(g);return `<tr><td>${esc(g.d.deposito)}</td><td class="mono">${esc(g.d.id)}</td><td class="mono">${esc(g.f.ss)}</td><td class="mono">${esc(g.f.dossier||'—')}</td><td class="mono">${gv.per.map(p=>`${esc(p.m.nombre)} ${p.antes}→${p.despues}`).join('<br>')}</td></tr>`;}).join('');
+  modal('Registrar despacho',`<p style="margin:0">Se darán de baja ${DS.items.length} vehículo(s) y se añadirá una salida a cada cuadro.</p>
+    <div class="tw"><table><thead><tr><th>Depósito</th><th>Dossier</th><th>S/Salida</th><th>Dossier sal.</th><th>Saldo</th></tr></thead><tbody>${res}</tbody></table></div>
+    ${dup?`<div class="note bad">La S/Salida ${esc(dup.f.ss)} ya está usada en ${esc(dup.d.deposito)}. Revisa el número antes de registrar.</div>`:''}
+    ${G.some(g=>!g.f.dossier)?'<div class="note">Hay salidas sin dossier de salida. Puedes registrarlas y completarlo después en el cuadro… pero es mejor ponerlo ahora.</div>':''}`,
+   [{label:'Cancelar'},{label:'Registrar',cls:'pri',fn:async()=>{
+     const resumen=G.map(g=>`${g.d.id} S/S ${g.f.ss}`).join(', ');
+     const ok=await commit(`Despacho ${resumen} · ${DS.items.length} uds`,st=>{
+       G.forEach(g=>{ const d=st.dossiers.find(x=>x.id===g.d.id); const gv=grupoVals(g); const n=d.salidas.length+1;
+         Object.keys(gv.u).forEach(k=>{ const sal=d.modelos[k].uds-d.salidas.reduce((a,s)=>a+(s.uds[k]||0),0); if(gv.u[k]>sal) throw new Error(`saldo insuficiente en ${d.id} ${k}`); });
+         const vins=g.items.filter(i=>i.vin).map(i=>i.vin);
+         d.salidas.push({n,ss:g.f.ss.trim(),dossier:g.f.dossier.trim(),dua:g.f.dua.trim(),fecha:g.f.fecha||hoy(),uds:gv.u,vins,fuente:'Registrado en la app · '+fdate(hoy())+' '+hora(),notas:g.f.prov?['Provisión de fondos: '+g.f.prov]:[]});
+         vins.forEach(vin=>{ const v=st.vehiculos.find(x=>x.vin===vin); v.estado='DES'; v.salida=n; v.conf='Despacho registrado en la app'; });
+         const s=ssNum(g.f.ss); const Dp=st.depositos[d.deposito]; if(s){ Dp.ultSS[s.y]=Math.max(Dp.ultSS[s.y]||0,s.n); }
+       });
+     });
+     if(ok){ DS.done=`Despacho registrado: ${esc(resumen)}. El stock y los cuadros ya reflejan la salida.`; DS.items=[]; DS.grp={}; DS.txt=''; DS.errs=[]; rDespacho(); toast('Despacho registrado','ok'); }
+   }}]);
+}
+
+/* =====================================================================
+   5 · LLEGADA · DESPACHO EN PUERTO + ENTRADA EN DEPÓSITO (DVD)
+   ===================================================================== */
+const LS={dossier:'',depositante:'',marca:'',deposito:'DEPB',divisa:'USD',llegada:hoy().slice(0,7),sEntrada:'',dvd:'',dosPuerto:'',duaPuerto:'',txt:'',filas:[],mods:{},tab:'cuadro',errs:[]};
+function parseLlegada(txt){
+  const out=[], errs=[]; const seen=new Set();
+  txt.toUpperCase().split(/\r?\n/).forEach(l=>{ const m=l.match(VINRX); if(!m) return; const vin=m[0]; if(seen.has(vin)) return; seen.add(vin);
+    if(!vinCheck(vin)) errs.push(`${vin}: dígito de control incorrecto.`);
+    const mp=modeloPorVin(vin); let dest='DEP';
+    if(/NO\s+LIBERAR|NI\s+VINCULAR/.test(l)) dest='NO'; else if(/LIBERAR|DESPACHAR|PUERTO/.test(l)) dest='PUE'; else if(/DEP[OÓ]SITO|D\.A\.|DVD|CIUDAD B|DEPA|DEPB/.test(l)) dest='DEP';
+    const col=(l.match(/\b(BLANCO|NEGRO|GRIS(?:\s+(?:OSCURO|CLARO|PLATA))?|AZUL|ROJO|VERDE|PLATA|BEIGE|NARANJA|AMARILLO)\b/)||[''])[0];
+    const exist=vehByVin(vin); if(exist) errs.push(`${vin}: ya existe en el dossier ${exist.dossier}.`);
+    out.push({vin,marca:mp?mp.marca:'',modelo:mp?mp.modelo:'?',color:col,dest}); });
+  if(!out.length) errs.push('No he encontrado bastidores. Pega la hoja de chasis (bastidor, modelo, color, destino).');
+  return {out,errs};
+}
+function syncModsLlegada(){
+  const ks=[...new Set(LS.filas.map(f=>f.modelo))];
+  ks.forEach(k=>{ if(LS.mods[k]) return; const f=LS.filas.find(x=>x.modelo===k);
+    const c=S.catalogo.find(c=>(c.marca+' '+c.modelo).toUpperCase().includes(((f.marca||'')+' '+k).toUpperCase().trim()))||S.catalogo.find(c=>c.modelo.toUpperCase()===k.toUpperCase());
+    LS.mods[k]=c?{marca:f.marca||c.marca,pb:c.pb,pn:c.pn,imp:c.imp,tte:c.tte,seg:c.seg,thc:c.thc,t3:c.t3,plast:c.plast,mon:{...c.mon},partida:c.partida,ref:c.ref}:{marca:f.marca,pb:0,pn:0,imp:0,tte:0,seg:0,thc:85,t3:14.75,plast:0,mon:{imp:LS.divisa,tte:'USD',seg:'USD'},partida:'',ref:'sin referencia'}; });
+  Object.keys(LS.mods).forEach(k=>{ if(!ks.includes(k)) delete LS.mods[k]; });
+}
+function cuentaLlegada(){ const c={}; LS.filas.forEach(f=>{ c[f.modelo]=c[f.modelo]||{tot:0,PUE:0,DEP:0,NO:0}; c[f.modelo].tot++; c[f.modelo][f.dest]++; }); return c; }
+function rLlegada(){
+  const el=$('#v-llegada'); if(!LS.sEntrada) LS.sEntrada=nextSE(LS.deposito)+'/'+YEAR;
+  syncModsLlegada(); const C=cuentaLlegada(); const ks=Object.keys(C);
+  el.innerHTML=`<div class="vh"><div><h1>Llegada · despacho en puerto y entrada en depósito</h1><p>Para cada contenedor o BL: pega la hoja de chasis con el estado aduanero (LIBERAR / DESPACHAR = puerto; Depósito Demo A / DVD A DEPÓSITO CIUDAD B = depósito). La app separa ambos flujos, prorratea los valores por unidad como el Excel y abre el cuadro del nuevo DVD.</p></div></div>
+   <div class="grid g2">
+    <div class="box"><div class="bh"><h3>1 · Datos de la llegada</h3></div><div class="bb"><div class="fr">
+      <label class="f">Dossier del DVD<input type="text" class="mono" id="lDos" value="${esc(LS.dossier)}" placeholder="245xxx"></label>
+      <label class="f">Depositante<input type="text" id="lDep" value="${esc(LS.depositante)}" placeholder="DEPOSITANTE DEMO S.L."></label>
+      <label class="f">Marca<input type="text" id="lMar" value="${esc(LS.marca)}" placeholder="MARCACUATRO"></label>
+      <label class="f">Depósito del DVD<select id="lDepo">${['DEPA','DEPB'].map(x=>`<option ${LS.deposito===x?'selected':''}>${x}</option>`).join('')}</select></label>
+      <label class="f">S/Entrada<input type="text" class="mono" id="lSE" value="${esc(LS.sEntrada)}"></label>
+      <label class="f">DVD / MRN<input type="text" class="mono" id="lDvd" value="${esc(LS.dvd)}" placeholder="99DEMOHB8HE…"></label>
+      <label class="f">Llegada<input type="text" class="mono" id="lLl" value="${esc(LS.llegada)}" placeholder="2026-10"></label>
+      <label class="f">Divisa factura<select id="lDiv">${['USD','CNY','EUR'].map(x=>`<option ${LS.divisa===x?'selected':''}>${x}</option>`).join('')}</select></label>
+      <label class="f">Dossier despacho puerto<input type="text" class="mono" id="lDP" value="${esc(LS.dosPuerto)}"></label>
+      <label class="f">DUA puerto<input type="text" class="mono" id="lDuaP" value="${esc(LS.duaPuerto)}" placeholder="99DEMOZXHCS…"></label>
+    </div></div></div>
+    <div class="box"><div class="bh"><h3>2 · Hoja de chasis</h3><span class="tiny muted">${LS.filas.length} bastidores</span></div><div class="bb stack">
+      <textarea id="lTxt" placeholder="TYJ2YFYUR3A2ST1LB  MOD-D  BLANCO  NEGRO  30-Mar  DESPACHAR&#10;FP1RF2V27YBCL1TMC  MOD-D  BLANCO  NEGRO  30-Mar  DVD A DEPOSITO CIUDAD B">${esc(LS.txt)}</textarea>
+      <div class="row"><button class="btn pri" id="lParse">Leer chasis</button><button class="btn" id="lClear" ${LS.filas.length?'':'disabled'}>Vaciar</button></div>
+      ${LS.errs.length?`<div class="note bad">${LS.errs.map(esc).join('<br>')}</div>`:''}
+    </div></div>
+   </div>
+   ${LS.filas.length?`<div class="box" style="margin-top:12px"><div class="bh"><h3>3 · Valores unitarios por modelo</h3><span class="tiny muted">precargados del catálogo · revisa contra la factura de este BL</span></div><div class="bb flush tw"><table><thead><tr><th>Modelo</th><th class="n">Total</th><th class="n">Puerto</th><th class="n">Depósito</th><th class="n">No vinc.</th><th class="n">PB</th><th class="n">PN</th><th class="n">Importe</th><th>Div.</th><th class="n">Flete</th><th>Div.</th><th class="n">Seguro</th><th>Div.</th><th class="n">THC €</th><th class="n">T-3 €</th><th class="n">Plást. kg</th><th>Partida</th></tr></thead><tbody>
+     ${ks.map(k=>{const m=LS.mods[k],c=C[k];const inp=(f,w)=>`<input type="number" step="any" class="mono" style="width:${w||90}px;text-align:right" data-lm="${esc(k)}" data-f="${f}" value="${m[f]}">`;const sel=f=>`<select data-lm="${esc(k)}" data-mon="${f}">${['USD','CNY','EUR'].map(x=>`<option ${m.mon[f]===x?'selected':''}>${x}</option>`).join('')}</select>`;
+       return `<tr><td>${esc((m.marca||'')+' '+k)}<div class="tiny muted">${esc(m.ref)}</div></td><td class="n mono">${c.tot}</td><td class="n mono">${c.PUE}</td><td class="n mono">${c.DEP}</td><td class="n mono">${c.NO}</td><td class="n">${inp('pb',80)}</td><td class="n">${inp('pn',80)}</td><td class="n">${inp('imp')}</td><td>${sel('imp')}</td><td class="n">${inp('tte',80)}</td><td>${sel('tte')}</td><td class="n">${inp('seg',70)}</td><td>${sel('seg')}</td><td class="n">${inp('thc',60)}</td><td class="n">${inp('t3',60)}</td><td class="n">${inp('plast',60)}</td><td><input type="text" class="mono" style="width:90px" data-lm="${esc(k)}" data-f="partida" value="${esc(m.partida||'')}"></td></tr>`;}).join('')}
+     </tbody></table></div></div>
+   <div class="grid g2" style="margin-top:12px">
+    <div class="box"><div class="bh"><h3>Bastidores y destino</h3><div class="row"><button class="btn sm" data-all="PUE">Todo a puerto</button><button class="btn sm" data-all="DEP">Todo a depósito</button></div></div><div class="bb flush scroll tw"><table><thead><tr><th>Bastidor</th><th>Modelo</th><th>Color</th><th>Destino</th></tr></thead><tbody>
+     ${LS.filas.map((f,i)=>`<tr><td class="vin">${vinHtml(f.vin)}</td><td>${esc(f.marca)} ${esc(f.modelo)}</td><td>${esc(f.color||'—')}</td><td><span class="seg">${[['PUE','Puerto'],['DEP','Depósito'],['NO','No vincular']].map(([v,l])=>`<button aria-pressed="${f.dest===v}" data-dest="${i}:${v}">${l}</button>`).join('')}</span></td></tr>`).join('')}
+    </tbody></table></div></div>
+    <div class="box"><div class="bh"><h3>4 · Documentos</h3><div class="row"><button class="btn" id="lCopy">Copiar</button><button class="btn pri" id="lReg" ${READONLY?'disabled':''}>Registrar llegada</button></div></div><div class="bb stack">
+     <div class="tabs" role="tablist">${[['cuadro','Cabecera del cuadro'],['puerto','DUA puerto'],['dvd','Entrada DVD'],['listas','Listas']].map(([k,l])=>`<button role="tab" aria-selected="${LS.tab===k}" data-ltab="${k}">${l}</button>`).join('')}</div>
+     <pre class="out" id="lOut">${esc(docLlegada(LS.tab))}</pre></div></div>
+   </div>`:''}`;
+  const bindI=(id,k,re)=>{ const e=$('#'+id); e.addEventListener('input',()=>{ LS[k]=e.value; const o=$('#lOut'); if(o) o.textContent=docLlegada(LS.tab); }); };
+  [['lDos','dossier'],['lDep','depositante'],['lMar','marca'],['lSE','sEntrada'],['lDvd','dvd'],['lLl','llegada'],['lDP','dosPuerto'],['lDuaP','duaPuerto']].forEach(([i,k])=>bindI(i,k));
+  $('#lTxt').addEventListener('input',e=>LS.txt=e.target.value);
+  $('#lDepo').onchange=e=>{ LS.deposito=e.target.value; LS.sEntrada=nextSE(LS.deposito)+'/'+YEAR; rLlegada(); };
+  $('#lDiv').onchange=e=>{ LS.divisa=e.target.value; rLlegada(); };
+  $('#lParse').onclick=()=>{ const r=parseLlegada(LS.txt); LS.filas=r.out; LS.errs=r.errs; if(!LS.marca&&r.out[0]) LS.marca=r.out[0].marca; rLlegada(); };
+  $('#lClear').onclick=()=>{ LS.filas=[]; LS.txt=''; LS.errs=[]; LS.mods={}; rLlegada(); };
+  $$('[data-dest]',el).forEach(b=>b.onclick=()=>{ const [i,v]=b.dataset.dest.split(':'); LS.filas[+i].dest=v; rLlegada(); });
+  $$('[data-all]',el).forEach(b=>b.onclick=()=>{ LS.filas.forEach(f=>f.dest=b.dataset.all); rLlegada(); });
+  $$('[data-lm]',el).forEach(inp=>inp.addEventListener('input',()=>{ const m=LS.mods[inp.dataset.lm]; if(inp.dataset.mon) m.mon[inp.dataset.mon]=inp.value; else if(inp.dataset.f==='partida') m.partida=inp.value; else m[inp.dataset.f]=parseFloat(inp.value)||0; const o=$('#lOut'); if(o) o.textContent=docLlegada(LS.tab); }));
+  $$('[data-mon]',el).forEach(s=>s.addEventListener('change',()=>{ LS.mods[s.dataset.lm].mon[s.dataset.mon]=s.value; const o=$('#lOut'); if(o) o.textContent=docLlegada(LS.tab); }));
+  $$('[data-ltab]',el).forEach(b=>b.onclick=()=>{ LS.tab=b.dataset.ltab; rLlegada(); });
+  const lc=$('#lCopy'); if(lc) lc.onclick=()=>copyText(docLlegada(LS.tab));
+  const lr=$('#lReg'); if(lr) lr.onclick=registrarLlegada;
+}
+function docLlegada(tab){
+  const C=cuentaLlegada(), ks=Object.keys(C); if(!ks.length) return '';
+  const mon=f=>{const s=new Set(ks.map(k=>LS.mods[k].mon[f]));return s.size===1?[...s][0]:'MIXTA';};
+  const head=['UDS','PB','PN','IMPORTE '+mon('imp'),'TTE '+mon('tte'),'SEGURO '+mon('seg'),'THC €','T3 €','PLASTICO'];
+  const line=v=>[v.uds,v.pb,v.pn,v.imp,v.tte,v.seg,v.thc,v.t3,v.plast].map(tsvn).join('\t');
+  const tot=dest=>ks.reduce((a,k)=>sumVals(a,vals(LS.mods[k],dest?C[k][dest]:C[k].tot)),{});
+  if(tab==='cuadro'){
+    const L=[`MARCA ${LS.marca||''} ${ks.join(' + ')}\t${head.join('\t')}`];
+    if(ks.some(k=>C[k].PUE)) L.push(`DESPACHO PUERTO${LS.dosPuerto?' ('+LS.dosPuerto+')':''}\t${line(tot('PUE'))}`);
+    L.push(`DVD (${LS.dossier||'dossier'})\t${line(tot('DEP'))}`);
+    if(ks.some(k=>C[k].NO)) L.push(`NO VINCULADOS\t${line(tot('NO'))}`);
+    L.push(`TOTAL\t${line(tot(null))}`,'',`PRECIO UDAD\t${head.join('\t')}`);
+    ks.forEach(k=>L.push(`${(LS.mods[k].marca||'')+' '+k}\t${line(vals(LS.mods[k],1))}`));
+    L.push('',`S/ENTRADA: ${LS.sEntrada}\t${line(tot('DEP'))}\t\t${line(tot('DEP'))}`,`DOSSIER ${LS.dossier}`);
+    return L.join('\n'); }
+  if(tab==='puerto'||tab==='dvd'){
+    const dest=tab==='puerto'?'PUE':'DEP'; const D=S.depositos[LS.deposito];
+    const L=[tab==='puerto'?`DESPACHO A CONSUMO EN PUERTO (importación directa)`:`ENTRADA EN DEPÓSITO ADUANERO · DVD`,
+      tab==='puerto'?`Dossier: ${LS.dosPuerto||'(pendiente)'} · DUA: ${LS.duaPuerto||'(pendiente)'}`:`Depósito: ${D.nombre} (${D.id}) · S/ENTRADA ${LS.sEntrada} · Dossier ${LS.dossier||'(pendiente)'} · DVD ${LS.dvd||'(pendiente)'}`,
+      `Depositante: ${LS.depositante||'(pendiente)'} · Divisa factura ${LS.divisa}`,''];
+    let any=false;
+    ks.forEach(k=>{ const n=C[k][dest]; if(!n) return; any=true; const m=LS.mods[k], v=vals(m,n);
+      L.push(`Partida ${m.partida||'(confirmar)'} · ${(m.marca||'')+' '+k} · ${n} uds`,`  PB ${fkg(v.pb)} kg · PN ${fkg(v.pn)} kg`,`  Importe ${f2(v.imp)} ${m.mon.imp} · Flete ${f2(v.tte)} ${m.mon.tte} · Seguro ${f2(v.seg)} ${m.mon.seg}`,`  THC ${f2(v.thc)} € · T-3 ${f2(v.t3)} €${tab==='puerto'?' → base IVA':''}${v.plast?' · Plástico '+fkg(v.plast)+' kg':''}`,
+        `  Bastidores: ${LS.filas.filter(f=>f.modelo===k&&f.dest===dest).map(f=>f.vin).join(', ')}`,''); });
+    if(!any) return tab==='puerto'?'Ningún bastidor marcado para despacho en puerto.':'Ningún bastidor marcado para depósito.';
+    const t=tot(dest); L.push(`TOTAL ${t.uds} uds · PB ${fkg(t.pb)} kg · THC ${f2(t.thc)} € · T-3 ${f2(t.t3)} €`);
+    if(tab==='puerto') L.push('Recuerda: THC y T-3 de puerto suelen facturarse por contenedor; aquí van prorrateados por vehículo como en los cuadros.');
+    return L.join('\n'); }
+  if(tab==='listas') return ['PUE','DEP','NO'].map(dst=>{ const fs=LS.filas.filter(f=>f.dest===dst); return `${{PUE:'DESPACHO EN PUERTO',DEP:'A DEPÓSITO '+LS.deposito,NO:'NO LIBERAR NI VINCULAR'}[dst]} (${fs.length})\n`+fs.map(f=>`${f.vin}  ${f.modelo}  ${f.color}`).join('\n'); }).join('\n\n');
+  return '';
+}
+function registrarLlegada(){
+  const C=cuentaLlegada(), ks=Object.keys(C);
+  if(!LS.dossier.trim()){ toast('Indica el dossier del DVD.','bad'); return; }
+  if(dossier(LS.dossier.trim())){ toast('Ese dossier ya existe.','bad'); return; }
+  if(ks.includes('?')){ toast('Hay bastidores sin modelo reconocido. Revisa la hoja.','bad'); return; }
+  const dup=LS.filas.filter(f=>vehByVin(f.vin)); if(dup.length){ toast(`${dup.length} bastidores ya existen en otro dossier.`,'bad'); return; }
+  const dep=ks.reduce((a,k)=>a+C[k].DEP,0), pue=ks.reduce((a,k)=>a+C[k].PUE,0);
+  modal('Registrar llegada',`<p style="margin:0">Dossier <b class="mono">${esc(LS.dossier)}</b>: ${pue} vehículo(s) despachados en puerto y ${dep} a ${esc(LS.deposito)} con S/Entrada ${esc(LS.sEntrada)}.</p>${dep===0?'<div class="note">No entra ningún vehículo en depósito: quedará registrado solo como despacho en puerto.</div>':''}`,
+  [{label:'Cancelar'},{label:'Registrar',cls:'pri',fn:async()=>{
+    const id=LS.dossier.trim();
+    const ok=await commit(`Llegada ${id} · ${pue} puerto + ${dep} DVD ${LS.deposito}`,st=>{
+      const modelos={}; ks.forEach(k=>{ const m=LS.mods[k]; modelos[k]={nombre:((m.marca||LS.marca)+' '+k).trim(),uds:C[k].DEP,pb:m.pb,pn:m.pn,imp:m.imp,tte:m.tte,seg:m.seg,thc:m.thc,t3:m.t3,plast:m.plast,mon:{...m.mon},partida:m.partida,version:''}; });
+      const pu={}; ks.forEach(k=>{ if(C[k].PUE) pu[k]=C[k].PUE; });
+      st.dossiers.push({id,deposito:LS.deposito,depositante:LS.depositante||'—',marca:LS.marca||'',titulo:`${ks.join(' + ')} · ${LS.filas.length} llegados`,sEntrada:LS.sEntrada,dvd:LS.dvd,llegada:LS.llegada,divisa:LS.divisa,archivo:'',modelos,
+        puerto:pue?{uds:pu,dossier:LS.dosPuerto,dua:LS.duaPuerto,nota:''}:null,salidas:[],notas:['Alta desde la app · '+fdate(hoy())]});
+      LS.filas.forEach(f=>{ if(f.dest==='NO') return; st.vehiculos.push({vin:f.vin,dossier:id,deposito:LS.deposito,marca:f.marca,modelo:f.modelo,version:'',color:f.color,tapiceria:'',llegada:LS.llegada,estado:f.dest==='PUE'?'PUE':'DEP',salida:null,conf:'Alta en la app',nota:''}); });
+      const s=ssNum(LS.sEntrada); if(s&&dep){ const Dp=st.depositos[LS.deposito]; Dp.ultSE[s.y]=Math.max(Dp.ultSE[s.y]||0,s.n); }
+    });
+    if(ok){ toast('Llegada registrada','ok'); CS.sel=id; Object.assign(LS,{dossier:'',depositante:'',marca:'',sEntrada:'',dvd:'',dosPuerto:'',duaPuerto:'',txt:'',filas:[],mods:{},errs:[]}); go('cuadros'); }
+  }}]);
+}
+
+/* =====================================================================
+   6 · CONCILIACIÓN AEAT
+   ===================================================================== */
+const AS={rows:null,res:null,err:'',fuente:''};
+function normMRN(s){ return String(s||'').replace(/^(DVD|DUA)\s*/i,'').replace(/\s+/g,'').trim(); }
+function parseAeatRows(aoa){
+  let hi=aoa.findIndex(r=>r.some(c=>/chasis/i.test(String(c)))); if(hi<0) throw new Error('No encuentro la columna «Chasis». Usa el Excel tal como lo exporta la AEAT.');
+  const H=aoa[hi].map(c=>String(c).trim().toLowerCase());
+  const ix=n=>H.findIndex(h=>h.startsWith(n));
+  const iM=ix('documento'), iD=ix('identific'), iC=ix('chasis'), iMa=ix('marca'), iMo=ix('modelo'), iDa=H.findIndex(h=>h==='datado'), iDoc=ix('doc. datado')>=0?ix('doc. datado'):ix('doc');
+  const out=[]; aoa.slice(hi+1).forEach(r=>{ const vin=String(r[iC]||'').trim().toUpperCase(); if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) return;
+    const dat=String(r[iDa]||'').trim().toLowerCase(); out.push({mrn:normMRN(r[iM]),dep:String(r[iD]||'').trim(),vin,marca:String(r[iMa]||'').trim(),modelo:String(r[iMo]||'').trim(),est:dat.startsWith('dat')?'D':'P',dua:normMRN(r[iDoc])}); });
+  if(!out.length) throw new Error('El fichero no contiene bastidores válidos.');
+  return out;
+}
+function conciliar(rows){
+  const depMap={'ESDEMOTU5ABYK8':'DEPA','ESDEMO27L52RE0':'DEPB'};
+  const res={ok:[],resuelve:[],conflicto:[],desconocido:[],faltan:[]}; const vistos=new Set();
+  rows.forEach(r=>{ vistos.add(r.vin); const v=vehByVin(r.vin);
+    if(!v){ res.desconocido.push({r}); return; }
+    if(v.estado==='SC'){ res.resuelve.push({r,v}); return; }
+    if((r.est==='P'&&v.estado==='DEP')||(r.est==='D'&&v.estado==='DES')) res.ok.push({r,v}); else res.conflicto.push({r,v}); });
+  const deps=new Set(rows.map(r=>depMap[r.dep]).filter(Boolean));
+  S.vehiculos.forEach(v=>{ if(deps.has(v.deposito)&&(v.estado==='DEP')&&!vistos.has(v.vin)) res.faltan.push({v}); });
+  return res;
+}
+function rAeat(){
+  const el=$('#v-aeat'); const R=AS.res;
+  el.innerHTML=`<div class="vh"><div><h1>Conciliación con la AEAT</h1><p>Carga el Excel de existencias que exporta la AEAT (columnas Documento MRN · Identificación depósito · Chasis · Marca · Modelo · Datado · Doc. Datado). La app lo cruza bastidor a bastidor con el stock y resuelve los «sin confirmar».</p></div></div>
+   <div class="grid g2">
+    <div class="box"><div class="bh"><h3>Cargar export</h3></div><div class="bb stack">
+      <label class="f">Fichero Excel o CSV<input type="file" id="aFile" accept=".xlsx,.xls,.csv,.txt"></label>
+      <label class="f">…o pega aquí las filas copiadas del Excel<textarea id="aTxt" placeholder="Documento MRN	Identificacion deposito	Chasis	Marca	Modelo	Datado	Doc. Datado"></textarea></label>
+      <div class="row"><button class="btn pri" id="aRun">Conciliar</button>${AS.fuente?`<span class="tiny muted">${esc(AS.fuente)} · ${AS.rows.length} filas</span>`:''}</div>
+      ${AS.err?`<div class="note bad">${esc(AS.err)}</div>`:''}
+    </div></div>
+    <div class="box"><div class="bh"><h3>Exports ya incorporados</h3></div><div class="bb stack">
+      <div class="note ok">DEPA (ESDEMOTU5ABYK8) · export del 30/09/2026 enviado por un operador: 340 bastidores en 16 DVD. Cuadra al 100 % con los cuadros 100011 (6 pendientes) y 100116 (19 pendientes antes de las S/S 46 y 47).</div>
+      <div class="note">DEPB (ESDEMO27L52RE0) · no hay export. Es lo que falta para identificar los ${saldo(dossier('100263'),'MOD-A')+saldo(dossier('100263'),'MOD-B')} MARCADOS pendientes del 100263 entre los 84 candidatos. Se obtiene con la consulta de existencias del depósito.</div>
+    </div></div>
+   </div>
+   ${R?`<div class="box" style="margin-top:12px"><div class="bh"><h3>Resultado</h3><div class="row"><span class="st DEP">Coinciden ${R.ok.length}</span><span class="st SC">Resuelve ${R.resuelve.length}</span><span class="st DES">Discrepan ${R.conflicto.length}</span><span class="chip">No están en la app ${R.desconocido.length}</span><span class="chip">En depósito sin figurar en AEAT ${R.faltan.length}</span><button class="btn pri" id="aApply" ${R.resuelve.length&&!READONLY?'':'disabled'}>Aplicar ${R.resuelve.length} resoluciones</button></div></div>
+    <div class="bb flush scroll tw"><table><thead><tr><th>Bastidor</th><th>Resultado</th><th>App</th><th>AEAT</th><th>DUA datado</th><th>DVD</th></tr></thead><tbody>
+    ${[...R.conflicto.map(x=>['DES','Discrepa',x]),...R.resuelve.map(x=>['SC','Resuelve',x]),...R.faltan.map(x=>['DEP','Falta en AEAT',x]),...R.desconocido.map(x=>['PUE','No está en la app',x])].map(([c,l,x])=>`<tr><td class="vin">${vinHtml((x.r||x.v).vin)}</td><td><span class="st ${c}">${l}</span></td><td>${x.v?ESTADOS[x.v.estado]:'—'}</td><td>${x.r?(x.r.est==='D'?'Datado':'Pendiente'):'—'}</td><td class="mono tiny">${esc(x.r?x.r.dua:'')}</td><td class="mono tiny">${esc(x.r?x.r.mrn:'')}</td></tr>`).join('')}
+    </tbody></table></div></div>`:''}`;
+  $('#aRun').onclick=async()=>{
+    AS.err='';
+    try{
+      const f=$('#aFile').files[0]; let aoa=null;
+      if(f){ if(/\.(xlsx|xls)$/i.test(f.name)){ const X=await loadXLSX(); const wb=X.read(await f.arrayBuffer(),{type:'array'}); aoa=X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''}); }
+        else { const t=await f.text(); aoa=t.split(/\r?\n/).map(l=>l.split(/\t|;/)); } AS.fuente=f.name; }
+      else { const t=$('#aTxt').value; if(!t.trim()) throw new Error('Carga un fichero o pega las filas.'); aoa=t.split(/\r?\n/).map(l=>l.split(/\t|;/)); if(!aoa.some(r=>r.some(c=>/chasis/i.test(c)))) aoa.unshift(['Documento MRN','Identificacion deposito','Chasis','Marca','Modelo','Datado','Doc. Datado']); AS.fuente='Texto pegado'; }
+      AS.rows=parseAeatRows(aoa); AS.res=conciliar(AS.rows);
+    }catch(e){ AS.err=e.message; AS.res=null; }
+    rAeat();
+  };
+  const ap=$('#aApply'); if(ap) ap.onclick=async()=>{
+    const n=AS.res.resuelve.length;
+    const ok=await commit(`Conciliación AEAT (${AS.fuente}) · ${n} bastidores resueltos`,st=>{
+      AS.res.resuelve.forEach(({r})=>{ const v=st.vehiculos.find(x=>x.vin===r.vin); const d=st.dossiers.find(x=>x.id===v.dossier);
+        if(r.est==='P'){ v.estado='DEP'; v.conf='AEAT · '+AS.fuente; }
+        else { v.estado='DES'; v.duaAeat=r.dua; const s=d.salidas.find(s=>s.dua&&normMRN(s.dua).startsWith(r.dua.split('/')[0].slice(0,18))); if(s){ v.salida=s.n; if(!s.vins.includes(v.vin)) s.vins.push(v.vin); } v.conf='AEAT · '+AS.fuente+(s?'':' (salida sin DUA en el cuadro)'); } });
+    });
+    if(ok){ toast(`${n} bastidores conciliados`,'ok'); AS.res=conciliar(AS.rows); rAeat(); }
+  };
+}
+
+/* =====================================================================
+   7 · VALORES (catálogo)
+   ===================================================================== */
+function rValores(){
+  const el=$('#v-valores');
+  el.innerHTML=`<div class="vh"><div><h1>Valores unitarios de referencia</h1><p>Por vehículo, tal como figuran en la cabecera de cada cuadro. Se usan para precargar una llegada nueva; los de cada dossier abierto están fijados en su cuadro. Importe, flete y seguro en su divisa; THC y T-3 en euros; plástico en kg.</p></div></div>
+   <div class="box"><div class="bb flush tw"><table><thead><tr><th>Marca</th><th>Modelo</th><th>Referencia</th><th class="n">PB kg</th><th class="n">PN kg</th><th class="n">Importe</th><th class="n">Flete</th><th class="n">Seguro</th><th class="n">THC €</th><th class="n">T-3 €</th><th class="n">Plást. kg</th><th>Partida</th><th>Fuente</th></tr></thead><tbody>
+   ${S.catalogo.map((c,i)=>`<tr><td>${esc(c.marca)}</td><td>${esc(c.modelo)}</td><td class="tiny">${esc(c.ref)}</td>${['pb','pn'].map(f=>`<td class="n"><input type="number" step="any" class="mono" style="width:80px;text-align:right" data-cat="${i}" data-f="${f}" value="${c[f]}" ${READONLY?'disabled':''}></td>`).join('')}
+     ${['imp','tte','seg'].map(f=>`<td class="n"><input type="number" step="any" class="mono" style="width:95px;text-align:right" data-cat="${i}" data-f="${f}" value="${c[f]}" ${READONLY?'disabled':''}> <span class="tiny muted">${MON_LBL[c.mon[f]]}</span></td>`).join('')}
+     ${['thc','t3','plast'].map(f=>`<td class="n"><input type="number" step="any" class="mono" style="width:66px;text-align:right" data-cat="${i}" data-f="${f}" value="${c[f]}" ${READONLY?'disabled':''}></td>`).join('')}
+     <td><input type="text" class="mono" style="width:86px" data-cat="${i}" data-f="partida" value="${esc(c.partida||'')}" ${READONLY?'disabled':''}></td><td class="tiny muted">${esc(c.fuente)}</td></tr>`).join('')}
+   </tbody></table></div></div>
+   <div class="row" style="margin-top:10px"><button class="btn pri" id="catSave" disabled>Guardar cambios</button><span class="tiny muted" id="catMsg">Edita una celda para activar el guardado.</span></div>`;
+  const pend={};
+  $$('[data-cat]',el).forEach(inp=>inp.addEventListener('input',()=>{ pend[inp.dataset.cat+':'+inp.dataset.f]=inp.value; $('#catSave').disabled=READONLY; $('#catMsg').textContent=Object.keys(pend).length+' cambio(s) sin guardar'; }));
+  $('#catSave').onclick=async()=>{ const ok=await commit('Valores de referencia actualizados',st=>{ Object.entries(pend).forEach(([k,v])=>{ const [i,f]=k.split(':'); st.catalogo[+i][f]=f==='partida'?v:(parseFloat(v)||0); }); }); if(ok) toast('Valores guardados','ok'); };
+}
+
+/* =====================================================================
+   8 · FUENTES Y DATOS
+   ===================================================================== */
+const FUENTES=[
+  ['Carpeta · Clientes/DEPOSITO DEPA','Cuadros de ejemplo (demo)','09/10/2026'],
+ ['Correo · Cliente','Solicitudes de despacho de ejemplo (demo)','09/2026'],
+];
+function rFuentes(){
+  const el=$('#v-fuentes');
+  el.innerHTML=`<div class="vh"><div><h1>Fuentes y datos</h1><p>De dónde sale cada cifra, qué se ha corregido respecto a los Excel y cómo se guarda el estado.</p></div></div>
+   <div class="grid g2">
+    <div class="box"><div class="bh"><h3>Fuentes consultadas</h3></div><div class="bb flush tw"><table><thead><tr><th>Origen</th><th>Contenido</th><th>Fecha</th></tr></thead><tbody>${FUENTES.map(f=>`<tr><td>${esc(f[0])}</td><td class="tiny">${esc(f[1])}</td><td class="mono tiny">${esc(f[2])}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="box"><div class="bh"><h3>Guardado</h3><span class="save ${READONLY?'ro':'ok'}">${MODE==='artifact'?(READONLY?'Solo lectura':'Versión compartida'):'Copia local'}</span></div><div class="bb stack">
+      <p class="tiny muted" style="margin:0">${MODE==='artifact'?'Cada despacho, llegada o conciliación guarda una versión nueva del fichero de datos del artifact: todo el que lo abra ve lo mismo y Claude puede leerlo.':'Esta copia guarda los cambios en este navegador. Exporta el estado para llevarlo a otro equipo.'}</p>
+      <div class="row"><button class="btn" id="fJson">Exportar estado (JSON)</button><button class="btn" id="fXlsx">Exportar todo (Excel)</button></div>
+      <label class="f">Importar estado (JSON)<input type="file" id="fImp" accept=".json,application/json" ${READONLY?'disabled':''}></label>
+      ${MODE!=='artifact'?'<button class="btn" id="fReset">Volver al estado del '+esc(fdate(S.corte))+'</button>':''}
+    </div></div>
+   </div>
+   <div class="box" style="margin-top:12px"><div class="bh"><h3>Histórico de DVD saldados</h3><span class="tiny muted">${S.historico.length}</span></div><div class="bb flush tw"><table><thead><tr><th>Depósito</th><th>Dossier</th><th>Contenido</th><th class="n">Uds</th><th>S/Salidas</th></tr></thead><tbody>${S.historico.map(h=>`<tr><td>${esc(h[0])}</td><td class="mono">${esc(h[1])}</td><td>${esc(h[2])}</td><td class="n mono">${esc(h[3])}</td><td class="mono tiny">${esc(h[4])}</td></tr>`).join('')}</tbody></table></div></div>
+   <div class="box" style="margin-top:12px"><div class="bh"><h3>Registro de cambios</h3><span class="tiny muted">${(S.log||[]).length}</span></div><div class="bb flush tw">${(S.log||[]).length?`<table><tbody>${S.log.map(l=>`<tr><td class="mono tiny" style="white-space:nowrap">${esc(new Date(l.t).toLocaleString('es-ES'))}</td><td>${esc(l.txt)}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">Sin cambios desde el corte del '+esc(fdate(S.corte))+'.</div>'}</div></div>`;
+  $('#fJson').onclick=()=>saveFile('estado_almacen_'+hoy()+'.json',JSON.stringify(S,null,1));
+  $('#fXlsx').onclick=()=>exportXlsx();
+  const imp=$('#fImp'); imp.onchange=async()=>{ const f=imp.files[0]; if(!f) return; let nuevo; try{ nuevo=JSON.parse(await f.text()); if(!nuevo.dossiers||!nuevo.vehiculos) throw new Error(); }catch(e){ toast('El fichero no es un estado válido de esta app.','bad'); return; }
+    modal('Importar estado',`<p style="margin:0">Se sustituirá el estado actual por <b>${esc(f.name)}</b> (${nuevo.vehiculos.length} vehículos, ${nuevo.dossiers.length} dossiers, generado ${esc(new Date(nuevo.generado).toLocaleString('es-ES'))}).</p>`,[{label:'Cancelar'},{label:'Sustituir',cls:'pri',fn:async()=>{ await commit('Estado importado desde '+f.name,st=>{ Object.keys(st).forEach(k=>delete st[k]); Object.assign(st,nuevo); }); }}]); };
+  const rs=$('#fReset'); if(rs) rs.onclick=()=>modal('Volver al estado inicial','<p style="margin:0">Se descartan los cambios guardados en este navegador y se vuelve al estado reconstruido del '+esc(fdate(S.corte))+'.</p>',[{label:'Cancelar'},{label:'Restablecer',cls:'pri',fn:()=>{ try{localStorage.removeItem(KEY);}catch(e){} S=JSON.parse(document.getElementById('estado-embebido').textContent); setSave('','Copia local'); renderAll(); toast('Estado restablecido','ok'); }}]);
+}
+
+/* =====================================================================
+   ARRANQUE
+   ===================================================================== */
+async function boot(){
+  const emb=document.getElementById('estado-embebido');
+  try{
+    if(emb){ MODE='embebido'; const seed=JSON.parse(emb.textContent); SEED_ID=seed.generado; S=seed;
+      try{ const raw=localStorage.getItem(KEY); if(raw){ const p=JSON.parse(raw); if(p&&p.seed===SEED_ID&&p.estado&&p.estado.dossiers) S=p.estado; } }catch(e){}
+      setSave('','Copia local');
+    } else {
+      const r=await fetch('data/estado.json',{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status); S=await r.json(); MODE='artifact'; setSave('','Versión compartida');
+      if(window.claude&&typeof window.claude.use==='function'){
+        artReady=window.claude.use('artifact').then(a=>{ ART=a; if(!a){ setReadOnly(); } return a; },()=>{ setReadOnly(); });
+        dlReady=window.claude.use('downloads').then(d=>{ DL=d; return d; },()=>null);
+      } else { setReadOnly(); }
+    }
+  }catch(e){ $('#v-panel').innerHTML=`<div class="note bad">No se ha podido cargar el estado de los depósitos (${esc(e.message)}). Recarga la página; si persiste, abre la copia autónoma.</div>`; return; }
+  S.log=S.log||[];
+  const h=(location.hash||'').replace('#',''); renderTick();
+  go(['panel','stock','cuadros','despacho','llegada','aeat','valores','fuentes'].includes(h)?h:'panel');
+}
+window.__INV={get S(){return S;},set S(v){S=v;},saldo,saldoDossier,depStock,parseSolicitud,grupos,DS,LS,AS,parseLlegada,cuentaLlegada,docLlegada,docDespacho,conciliar,parseAeatRows,vinCheck,nextSS,commit,renderAll,go,ledger,bloqueCuadro,textoDUA};
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
+})();
+
+</script>
+</body>
+</html>
